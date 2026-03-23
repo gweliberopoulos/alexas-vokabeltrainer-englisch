@@ -56,6 +56,13 @@
     "file": "data/unit2-story-checkin.json"
   },
   {
+    "id": "unit3-checkin",
+    "type": "vocab",
+    "title": "Unit 3 – Check-in",
+    "description": "The Emerald Isle – Irland, Klima, Geschichte",
+    "file": "data/unit3-checkin.json"
+  },
+  {
     "id": "irregular-verbs",
     "type": "verbs",
     "title": "Unregelmäßige Verben",
