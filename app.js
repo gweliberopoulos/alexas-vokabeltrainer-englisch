@@ -18,6 +18,7 @@ let sessionCorrect = 0;
 let sessionWrong   = 0;
 let cardState      = {}; // per-card rendering state
 let allPool        = []; // flat list of all cards from selected chapters (for MC distractors)
+let sessionType    = 'alles'; // 'alles' | 'kurztest' | 'schwach'
 
 // ===== SRS FUNCTIONS =====
 
@@ -83,6 +84,54 @@ function formatDate(ts) {
   if (diff === 1) return 'Gestern';
   if (diff < 7)  return `vor ${diff} Tagen`;
   return new Date(ts).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+
+// ===== WEAK SCORE =====
+
+function weakKey(chapterId, type, id) {
+  if (type === 'verbs') return `weak_${chapterId}_verbs_${id}`;
+  return `weak_${chapterId}_${direction}_${id}`;
+}
+
+function getWeak(key) {
+  return parseInt(localStorage.getItem(key) || '0', 10) || 0;
+}
+
+function setWeak(key, val) {
+  try { localStorage.setItem(key, String(Math.max(0, val))); } catch {}
+}
+
+function applyWeakUpdate(card, isCorrect) {
+  if (sessionType === 'alles') return;
+  const id = card.type === 'verbs' ? card.entry.base : card.entry.en;
+  const wk = weakKey(card.chapterId, card.type, id);
+  const cur = getWeak(wk);
+  if (sessionType === 'kurztest') {
+    setWeak(wk, isCorrect ? Math.max(0, cur - 1) : cur + 1);
+  } else if (sessionType === 'schwach' && isCorrect) {
+    setWeak(wk, Math.max(0, cur - 1));
+  }
+}
+
+function getWeakCount(chapterId, type, entries) {
+  return entries.filter(e => {
+    const id = type === 'verbs' ? e.base : e.en;
+    return getWeak(weakKey(chapterId, type, id)) >= 1;
+  }).length;
+}
+
+function getTotalWeakCount() {
+  let count = 0;
+  for (const info of indexData) {
+    if (!selectedIds.has(info.id) || !chapterData[info.id]) continue;
+    const data = chapterData[info.id];
+    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    for (const entry of entries) {
+      const id = data.type === 'verbs' ? entry.base : entry.en;
+      if (getWeak(weakKey(info.id, data.type, id)) >= 1) count++;
+    }
+  }
+  return count;
 }
 
 // ===== LEVENSHTEIN =====
@@ -177,7 +226,7 @@ async function renderChapterScreen() {
         </div>
       </div>
       <div class="start-section">
-        <button class="btn-primary" id="btn-start" ${selectedIds.size===0?'disabled':''} onclick="goToModeScreen()">
+        <button class="btn-primary" id="btn-start" ${selectedIds.size===0?'disabled':''} onclick="goToSessionTypePicker()">
           Jetzt lernen →
         </button>
       </div>
@@ -193,6 +242,7 @@ async function renderChapterScreen() {
     const learned = getLearnedCount(info.id, data.type, entries);
     const lastTs  = getLastPracticed(info.id, data.type, entries);
     const pct     = total > 0 ? Math.round((learned / total) * 100) : 0;
+    const weak    = getWeakCount(info.id, data.type, entries);
     const sel     = selectedIds.has(info.id);
     const badge   = data.type === 'verbs'
       ? `<span class="badge badge-verbs">Verben</span>`
@@ -218,6 +268,7 @@ async function renderChapterScreen() {
           <div class="chapter-progress-bar">
             <div class="chapter-progress-fill" style="width:${pct}%"></div>
           </div>
+          ${weak > 0 ? `<div class="chapter-weak-hint">⚠️ ${weak} schwache Vokabeln</div>` : ''}
         </div>
       </div>`;
     list.appendChild(card);
@@ -265,6 +316,58 @@ function setDirection(dir) {
   const deBtn = document.getElementById('btn-de-en');
   if (enBtn) enBtn.classList.toggle('active', dir === 'EN-DE');
   if (deBtn) deBtn.classList.toggle('active', dir === 'DE-EN');
+}
+
+// ===== SESSION TYPE PICKER =====
+
+function goToSessionTypePicker() {
+  if (selectedIds.size === 0) return;
+  const totalWeak = getTotalWeakCount();
+
+  document.getElementById('app').innerHTML = `
+    <div class="screen active">
+      <div class="screen-header">
+        <button class="btn-back" onclick="renderChapterScreen()">‹</button>
+        <h2>Wie möchtest du lernen?</h2>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;flex:1;overflow-y:auto">
+        <div class="session-type-card" onclick="startAllesLernen()">
+          <div class="session-type-title">📚 Alles lernen</div>
+          <div class="session-type-desc">Alle fälligen Karten (SM-2) – Modus frei wählbar</div>
+        </div>
+        <div class="session-type-card" onclick="startKurztest()">
+          <div class="session-type-title">⚡ Kurztest — 20 Karten</div>
+          <div class="session-type-desc">Schneller Multiple-Choice-Mix, merkt Schwächen</div>
+        </div>
+        <div class="session-type-card${totalWeak === 0 ? ' session-type-disabled' : ''}"
+             ${totalWeak > 0 ? 'onclick="openWeakModeScreen()"' : ''}>
+          <div class="session-type-title">⚠️ Schwache Vokabeln — ${totalWeak} Karten</div>
+          <div class="session-type-desc">${totalWeak > 0
+            ? 'Nur was beim Kurztest falsch war – Modus frei wählbar'
+            : 'Keine schwachen Vokabeln vorhanden – erst Kurztest machen!'}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function startAllesLernen() {
+  sessionType = 'alles';
+  goToModeScreen();
+}
+
+function openWeakModeScreen() {
+  sessionType = 'schwach';
+  goToModeScreen();
+}
+
+async function startKurztest() {
+  sessionType = 'kurztest';
+  for (const info of indexData) {
+    if (selectedIds.has(info.id) && !chapterData[info.id]) {
+      await loadChapterFile(info);
+    }
+  }
+  await startSession('mc');
 }
 
 // ===== MODE SELECTION SCREEN =====
@@ -384,6 +487,77 @@ function buildSessionCards(mode) {
   return [...shuffle(due), ...shuffle(fresh), ...shuffle(future)];
 }
 
+function buildKurztestCards() {
+  allPool = [];
+  for (const info of indexData) {
+    if (!selectedIds.has(info.id)) continue;
+    const data = chapterData[info.id];
+    if (!data) continue;
+    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    for (const entry of entries) {
+      const id   = data.type === 'verbs' ? entry.base : entry.en;
+      const key  = srsKey(info.id, data.type, id);
+      const srs  = getSRS(key) || { level: 0, nextReview: 0 };
+      const weak = getWeak(weakKey(info.id, data.type, id));
+      allPool.push({ entry, chapterId: info.id, type: data.type, key, srs, weak });
+    }
+  }
+
+  const seen   = new Set();
+  const result = [];
+
+  function addBatch(cards) {
+    for (const c of shuffle(cards)) {
+      if (!seen.has(c.key) && result.length < 20) {
+        seen.add(c.key);
+        result.push(c);
+      }
+    }
+  }
+
+  // Priority 1: high weak score (often wrong)
+  addBatch(allPool.filter(c => c.weak >= 2));
+  // Priority 2: never practiced
+  addBatch(allPool.filter(c => c.srs.level === 0 && !c.srs.lastPracticed));
+  // Priority 3: level 1 (unsicher)
+  addBatch(allPool.filter(c => c.srs.level === 1));
+  // Priority 4: oldest reviewed
+  const oldest = allPool
+    .filter(c => !seen.has(c.key))
+    .sort((a, b) => (a.srs.lastPracticed || 0) - (b.srs.lastPracticed || 0));
+  for (const c of oldest) {
+    if (!seen.has(c.key) && result.length < 20) { seen.add(c.key); result.push(c); }
+  }
+  // Priority 5: random fill
+  addBatch(allPool.filter(c => !seen.has(c.key)));
+
+  return result;
+}
+
+function buildWeakCards(mode) {
+  allPool = [];
+  const weak = [];
+  for (const info of indexData) {
+    if (!selectedIds.has(info.id)) continue;
+    const data = chapterData[info.id];
+    if (!data) continue;
+    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    for (const entry of entries) {
+      const id  = data.type === 'verbs' ? entry.base : entry.en;
+      const key = srsKey(info.id, data.type, id);
+      const srs = getSRS(key) || { level: 0, nextReview: 0 };
+      const wk  = getWeak(weakKey(info.id, data.type, id));
+      const card = { entry, chapterId: info.id, type: data.type, key, srs, weak: wk };
+      allPool.push(card);
+      if (wk >= 1) {
+        if (mode === 'gap' && data.type === 'vocab' && !entry.ex) continue;
+        weak.push(card);
+      }
+    }
+  }
+  return shuffle(weak);
+}
+
 async function startSession(mode) {
   currentMode = mode;
 
@@ -394,7 +568,13 @@ async function startSession(mode) {
     }
   }
 
-  sessionCards   = buildSessionCards(mode);
+  if (sessionType === 'kurztest') {
+    sessionCards = buildKurztestCards();
+  } else if (sessionType === 'schwach') {
+    sessionCards = buildWeakCards(mode);
+  } else {
+    sessionCards = buildSessionCards(mode);
+  }
   sessionTotal   = sessionCards.length;
   sessionIdx     = 0;
   sessionCorrect = 0;
@@ -470,9 +650,10 @@ function renderCurrentCard() {
 
 function doRateAndAdvance(rating) {
   const card = sessionCards[sessionIdx];
+  applyWeakUpdate(card, rating >= 2);
   updateSRS(card.key, rating);
 
-  if (rating === 0 && !card.requeued) {
+  if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
     sessionCards.splice(pos, 0, { ...card, requeued: true });
     sessionTotal = sessionCards.length;
@@ -628,10 +809,12 @@ function selectMCOption(idx) {
   });
 
   const rating = isRight ? 2 : 0;
-  updateSRS(sessionCards[sessionIdx].key, rating);
-  if (rating === 0 && !sessionCards[sessionIdx].requeued) {
+  const curCard = sessionCards[sessionIdx];
+  applyWeakUpdate(curCard, isRight);
+  updateSRS(curCard.key, rating);
+  if (rating === 0 && !curCard.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
-    sessionCards.splice(pos, 0, { ...sessionCards[sessionIdx], requeued: true });
+    sessionCards.splice(pos, 0, { ...curCard, requeued: true });
     sessionTotal = sessionCards.length;
   }
   if (isRight) sessionCorrect++; else sessionWrong++;
@@ -704,8 +887,9 @@ function submitTyping() {
     sessionWrong++;
   }
 
+  applyWeakUpdate(card, result.ok);
   updateSRS(card.key, rating);
-  if (rating === 0 && !card.requeued) {
+  if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
     sessionCards.splice(pos, 0, { ...card, requeued: true });
     sessionTotal = sessionCards.length;
@@ -790,10 +974,12 @@ function selectPronOption(idx) {
   });
 
   const rating = isRight ? 2 : 0;
-  updateSRS(sessionCards[sessionIdx].key, rating);
-  if (rating === 0 && !sessionCards[sessionIdx].requeued) {
+  const curCard2 = sessionCards[sessionIdx];
+  applyWeakUpdate(curCard2, isRight);
+  updateSRS(curCard2.key, rating);
+  if (rating === 0 && !curCard2.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
-    sessionCards.splice(pos, 0, { ...sessionCards[sessionIdx], requeued: true });
+    sessionCards.splice(pos, 0, { ...curCard2, requeued: true });
     sessionTotal = sessionCards.length;
   }
   if (isRight) sessionCorrect++; else sessionWrong++;
@@ -912,8 +1098,9 @@ function submitGap() {
     sessionWrong++;
   }
 
+  applyWeakUpdate(card, result.ok);
   updateSRS(card.key, rating);
-  if (rating === 0 && !card.requeued) {
+  if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
     sessionCards.splice(pos, 0, { ...card, requeued: true });
     sessionTotal = sessionCards.length;
@@ -1017,6 +1204,7 @@ function submitChain() {
     // Both steps done → rate and advance
     setTimeout(() => {
       const rating = cardState.chainError ? 2 : 3;
+      applyWeakUpdate(card, !cardState.chainError);
       updateSRS(card.key, rating);
       if (rating >= 2) sessionCorrect++;
       sessionIdx++;
@@ -1036,26 +1224,46 @@ function renderResults() {
   else if (pct >= 60)          { emoji = '😊'; title = 'Gut gemacht!'; }
   else if (pct >= 40)          { emoji = '🎯'; title = 'Üb weiter!'; }
 
+  const isKurztest  = sessionType === 'kurztest';
+  const totalWeak   = getTotalWeakCount();
+  const heading     = isKurztest ? 'Kurztest abgeschlossen!' : title;
+  const headEmoji   = isKurztest ? (pct >= 80 ? '🌟' : '📊') : emoji;
+
+  const weakBanner  = isKurztest && totalWeak > 0 ? `
+    <div class="kurztest-weak-banner">
+      <div class="kurztest-weak-text">
+        Du hast <strong>${totalWeak}</strong> schwache ${totalWeak === 1 ? 'Vokabel' : 'Vokabeln'} gesammelt.
+      </div>
+      <button class="btn-primary" style="margin-top:10px" onclick="openWeakModeScreen()">
+        🎯 Jetzt vertiefen
+      </button>
+    </div>` : '';
+
+  const repeatLabel  = isKurztest ? '⚡ Nochmal Kurztest' : '🔄 Nochmal lernen';
+  const repeatAction = isKurztest ? 'startKurztest()' : 'startSession(currentMode)';
+  const modeBtn      = !isKurztest
+    ? `<button class="btn-secondary" onclick="goToModeScreen()">← Anderen Modus wählen</button>` : '';
+
   document.getElementById('app').innerHTML = `
     <div class="screen active" id="screen-results">
       <div class="screen-header">
         <button class="btn-back" onclick="renderChapterScreen()">‹</button>
-        <h2>Ergebnis</h2>
+        <h2>${isKurztest ? 'Kurztest' : 'Ergebnis'}</h2>
       </div>
       <div class="results-body">
         <div class="results-header">
-          <div class="results-emoji">${emoji}</div>
-          <div class="results-title">${title}</div>
+          <div class="results-emoji">${headEmoji}</div>
+          <div class="results-title">${heading}</div>
           <div class="results-subtitle">${pct} % richtig · ${Math.min(sessionIdx, sessionTotal)} Karten</div>
         </div>
         <div class="results-stats">
           <div class="results-stat">
             <div class="results-stat-value green">${sessionCorrect}</div>
-            <div class="results-stat-label">Richtig</div>
+            <div class="results-stat-label">✅ Richtig</div>
           </div>
           <div class="results-stat">
             <div class="results-stat-value red">${sessionWrong}</div>
-            <div class="results-stat-label">Falsch</div>
+            <div class="results-stat-label">❌ Falsch</div>
           </div>
           <div class="results-stat">
             <div class="results-stat-value">${sessionTotal}</div>
@@ -1066,9 +1274,11 @@ function renderResults() {
             <div class="results-stat-label">Quote</div>
           </div>
         </div>
+        ${weakBanner}
         <div class="results-actions">
-          <button class="btn-primary" onclick="startSession(currentMode)">🔄 Nochmal lernen</button>
-          <button class="btn-secondary" onclick="goToModeScreen()">← Anderen Modus wählen</button>
+          <button class="btn-primary" onclick="${repeatAction}">${repeatLabel}</button>
+          ${modeBtn}
+          <button class="btn-secondary" onclick="goToSessionTypePicker()">← Lernmodus wählen</button>
           <button class="btn-secondary" onclick="renderChapterScreen()">🏠 Kapitelauswahl</button>
         </div>
       </div>
