@@ -1,22 +1,23 @@
 const CACHE_NAME = 'vokabeltrainer-v2';
+const BASE = '/alexas-vokabeltrainer-englisch/';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/style.css',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/data/index.json',
-  '/data/unit1-across-cultures.json',
-  '/data/unit1-weekend-workshop.json',
-  '/data/unit1-checkout-story.json',
-  '/data/unit1-text-smart.json',
-  '/data/unit2.json',
-  '/data/unit2-welcome-station1.json',
-  '/data/unit2-station2.json',
-  '/data/unit2-story-checkin.json',
-  '/data/irregular-verbs.json'
+  BASE,
+  BASE + 'index.html',
+  BASE + 'app.js',
+  BASE + 'style.css',
+  BASE + 'manifest.json',
+  BASE + 'icons/icon-192.png',
+  BASE + 'icons/icon-512.png',
+  BASE + 'data/index.json',
+  BASE + 'data/unit1-across-cultures.json',
+  BASE + 'data/unit1-weekend-workshop.json',
+  BASE + 'data/unit1-checkout-story.json',
+  BASE + 'data/unit1-text-smart.json',
+  BASE + 'data/unit2.json',
+  BASE + 'data/unit2-welcome-station1.json',
+  BASE + 'data/unit2-station2.json',
+  BASE + 'data/unit2-story-checkin.json',
+  BASE + 'data/irregular-verbs.json'
 ];
 
 self.addEventListener('install', e => {
