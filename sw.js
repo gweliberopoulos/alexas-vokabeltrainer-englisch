@@ -17,6 +17,7 @@ const ASSETS = [
   BASE + 'data/unit2-welcome-station1.json',
   BASE + 'data/unit2-station2.json',
   BASE + 'data/unit2-story-checkin.json',
+  BASE + 'data/unit3-checkin.json',
   BASE + 'data/irregular-verbs.json'
 ];
 
