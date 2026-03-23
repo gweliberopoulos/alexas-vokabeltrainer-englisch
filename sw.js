@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vokabeltrainer-v2';
+const CACHE_NAME = 'vokabeltrainer-v3';
 const BASE = '/alexas-vokabeltrainer-englisch/';
 const ASSETS = [
   BASE,

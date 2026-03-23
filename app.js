@@ -20,6 +20,9 @@ let cardState      = {}; // per-card rendering state
 let allPool        = []; // flat list of all cards from selected chapters (for MC distractors)
 let sessionType    = 'alles'; // 'alles' | 'kurztest' | 'schwach'
 
+// Stats state
+let statsWorstWords = [];
+
 // ===== SRS FUNCTIONS =====
 
 function srsKey(chapterId, type, id) {
@@ -134,6 +137,121 @@ function getTotalWeakCount() {
   return count;
 }
 
+// ===== STATISTICS =====
+
+function todayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function yesterdayDateStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getStatsTotal() {
+  try {
+    return JSON.parse(localStorage.getItem('stats_total')) ||
+      { totalAnswered: 0, totalCorrect: 0, currentStreak: 0, lastLearnedDate: '', longestStreak: 0 };
+  } catch {
+    return { totalAnswered: 0, totalCorrect: 0, currentStreak: 0, lastLearnedDate: '', longestStreak: 0 };
+  }
+}
+
+function recordAnswer(card, isCorrect) {
+  const today = todayDateStr();
+
+  // a) Day log
+  const dayKey = `stats_day_${today}`;
+  let dayData;
+  try { dayData = JSON.parse(localStorage.getItem(dayKey)) || { correct: 0, wrong: 0, total: 0 }; }
+  catch { dayData = { correct: 0, wrong: 0, total: 0 }; }
+  if (isCorrect) dayData.correct++; else dayData.wrong++;
+  dayData.total++;
+  try { localStorage.setItem(dayKey, JSON.stringify(dayData)); } catch {}
+
+  pruneOldDayStats();
+
+  // b) Word tracking
+  const wordId = card.type === 'verbs' ? card.entry.base : card.entry.en;
+  const wordKey = `stats_word_${card.chapterId}_${wordId}`;
+  let wordData;
+  try { wordData = JSON.parse(localStorage.getItem(wordKey)) || { correct: 0, wrong: 0 }; }
+  catch { wordData = { correct: 0, wrong: 0 }; }
+  if (isCorrect) wordData.correct++; else wordData.wrong++;
+  try { localStorage.setItem(wordKey, JSON.stringify(wordData)); } catch {}
+
+  // c) Total stats + streak
+  const total = getStatsTotal();
+  total.totalAnswered++;
+  if (isCorrect) total.totalCorrect++;
+
+  const yesterday = yesterdayDateStr();
+  if (total.lastLearnedDate === yesterday) {
+    total.currentStreak = (total.currentStreak || 0) + 1;
+  } else if (total.lastLearnedDate !== today) {
+    total.currentStreak = 1;
+  }
+  total.lastLearnedDate = today;
+  if (total.currentStreak > (total.longestStreak || 0)) total.longestStreak = total.currentStreak;
+
+  try { localStorage.setItem('stats_total', JSON.stringify(total)); } catch {}
+}
+
+function pruneOldDayStats() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('stats_day_')) keys.push(k);
+  }
+  if (keys.length <= 30) return;
+  keys.sort();
+  keys.slice(0, keys.length - 30).forEach(k => localStorage.removeItem(k));
+}
+
+function getDayRange(days) {
+  const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const str = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    let dayData;
+    try { dayData = JSON.parse(localStorage.getItem(`stats_day_${str}`)) || { correct: 0, wrong: 0, total: 0 }; }
+    catch { dayData = { correct: 0, wrong: 0, total: 0 }; }
+    result.push({ str, label: dayNames[d.getDay()], ...dayData });
+  }
+  return result;
+}
+
+function getAllWordStats() {
+  const results = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith('stats_word_')) continue;
+    const rest = k.slice('stats_word_'.length);
+    for (const info of indexData) {
+      const prefix = info.id + '_';
+      if (rest.startsWith(prefix)) {
+        const wordId = rest.slice(prefix.length);
+        const d = chapterData[info.id];
+        if (!d) break;
+        const entries = d.type === 'verbs' ? d.verbs : d.vocab;
+        const entry = entries.find(e => (d.type === 'verbs' ? e.base : e.en) === wordId);
+        if (entry) {
+          let data;
+          try { data = JSON.parse(localStorage.getItem(k)) || { correct: 0, wrong: 0 }; }
+          catch { data = { correct: 0, wrong: 0 }; }
+          results.push({ entry, chapterId: info.id, type: d.type, correct: data.correct, wrong: data.wrong });
+        }
+        break;
+      }
+    }
+  }
+  return results;
+}
+
 // ===== LEVENSHTEIN =====
 
 function levenshtein(a, b) {
@@ -215,6 +333,10 @@ async function renderChapterScreen() {
           <button id="btn-en-de" class="${direction==='EN-DE'?'active':''}" onclick="setDirection('EN-DE')">🇬🇧 EN → 🇩🇪 DE</button>
           <button id="btn-de-en" class="${direction==='DE-EN'?'active':''}" onclick="setDirection('DE-EN')">🇩🇪 DE → 🇬🇧 EN</button>
         </div>
+      </div>
+      <div class="tab-bar">
+        <button class="tab-btn tab-btn-active">🏠 Lernen</button>
+        <button class="tab-btn" onclick="renderStatsScreen()">📊 Statistiken</button>
       </div>
       <div class="chapter-select-all" onclick="toggleSelectAll()">
         <span id="select-all-icon">${selectedIds.size === indexData.length && indexData.length > 0 ? '✓' : '☐'}</span>
@@ -651,6 +773,7 @@ function renderCurrentCard() {
 function doRateAndAdvance(rating) {
   const card = sessionCards[sessionIdx];
   applyWeakUpdate(card, rating >= 2);
+  recordAnswer(card, rating >= 2);
   updateSRS(card.key, rating);
 
   if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
@@ -811,6 +934,7 @@ function selectMCOption(idx) {
   const rating = isRight ? 2 : 0;
   const curCard = sessionCards[sessionIdx];
   applyWeakUpdate(curCard, isRight);
+  recordAnswer(curCard, isRight);
   updateSRS(curCard.key, rating);
   if (rating === 0 && !curCard.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
@@ -888,6 +1012,7 @@ function submitTyping() {
   }
 
   applyWeakUpdate(card, result.ok);
+  recordAnswer(card, result.ok);
   updateSRS(card.key, rating);
   if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
@@ -976,6 +1101,7 @@ function selectPronOption(idx) {
   const rating = isRight ? 2 : 0;
   const curCard2 = sessionCards[sessionIdx];
   applyWeakUpdate(curCard2, isRight);
+  recordAnswer(curCard2, isRight);
   updateSRS(curCard2.key, rating);
   if (rating === 0 && !curCard2.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
@@ -1099,6 +1225,7 @@ function submitGap() {
   }
 
   applyWeakUpdate(card, result.ok);
+  recordAnswer(card, result.ok);
   updateSRS(card.key, rating);
   if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
     const pos = Math.min(sessionIdx + 4, sessionCards.length);
@@ -1205,6 +1332,7 @@ function submitChain() {
     setTimeout(() => {
       const rating = cardState.chainError ? 2 : 3;
       applyWeakUpdate(card, !cardState.chainError);
+      recordAnswer(card, !cardState.chainError);
       updateSRS(card.key, rating);
       if (rating >= 2) sessionCorrect++;
       sessionIdx++;
@@ -1281,6 +1409,167 @@ function renderResults() {
           <button class="btn-secondary" onclick="goToSessionTypePicker()">← Lernmodus wählen</button>
           <button class="btn-secondary" onclick="renderChapterScreen()">🏠 Kapitelauswahl</button>
         </div>
+      </div>
+    </div>`;
+}
+
+// ===== STATS SCREEN =====
+
+function buildChartHTML(days) {
+  const data = getDayRange(days);
+  const CHART_H = 100;
+  const maxTotal = Math.max(...data.map(d => d.total), 1);
+  return `<div class="chart-bars">
+    ${data.map(d => {
+      const totalH = Math.round((d.total / maxTotal) * CHART_H);
+      const correctH = d.total > 0 ? Math.round((d.correct / d.total) * totalH) : 0;
+      const wrongH = totalH - correctH;
+      return `<div class="chart-bar-wrap">
+        <div class="chart-bar">
+          <div class="chart-bar-inner" style="height:${totalH}px">
+            <div class="chart-bar-correct" style="height:${correctH}px"></div>
+            <div class="chart-bar-wrong" style="height:${wrongH}px"></div>
+          </div>
+        </div>
+        <div class="chart-label">${d.label}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function switchChart(days) {
+  const container = document.getElementById('chart-container');
+  if (container) container.innerHTML = buildChartHTML(days);
+  document.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.remove('chart-toggle-active'));
+  const activeBtn = document.getElementById(`btn-chart-${days}`);
+  if (activeBtn) activeBtn.classList.add('chart-toggle-active');
+}
+
+function startDifficultWordSession() {
+  if (!statsWorstWords.length) return;
+  sessionType = 'alles';
+  currentMode = 'typing';
+  sessionCards = statsWorstWords.map(w => {
+    const id = w.type === 'verbs' ? w.entry.base : w.entry.en;
+    const key = srsKey(w.chapterId, w.type, id);
+    return { entry: w.entry, chapterId: w.chapterId, type: w.type, key, srs: getSRS(key) || { level: 0, nextReview: 0 } };
+  });
+  allPool = [...sessionCards];
+  sessionTotal = sessionCards.length;
+  sessionIdx = 0;
+  sessionCorrect = 0;
+  sessionWrong = 0;
+  cardState = {};
+  renderSessionShell('');
+  renderCurrentCard();
+}
+
+function renderStatsScreen() {
+  const total = getStatsTotal();
+  const today = todayDateStr();
+  const yesterday = yesterdayDateStr();
+
+  let streakClass, streakStatus;
+  if (total.lastLearnedDate === today) {
+    streakClass = 'streak-active';
+    streakStatus = 'Heute gelernt 🔥';
+  } else if (total.lastLearnedDate === yesterday) {
+    streakClass = 'streak-yesterday';
+    streakStatus = 'Gestern zuletzt gelernt';
+  } else {
+    streakClass = 'streak-inactive';
+    streakStatus = total.lastLearnedDate ? `Zuletzt: ${total.lastLearnedDate}` : 'Noch nicht gelernt';
+  }
+
+  const wordStats = getAllWordStats();
+  const qualified = wordStats.filter(w => w.correct + w.wrong >= 3);
+  const bestWords  = [...qualified].sort((a, b) => (b.correct/(b.correct+b.wrong)) - (a.correct/(a.correct+a.wrong))).slice(0, 5);
+  const worstWords = [...qualified].sort((a, b) => (a.correct/(a.correct+a.wrong)) - (b.correct/(b.correct+b.wrong))).slice(0, 5);
+  statsWorstWords = worstWords;
+
+  const pctCorrect = total.totalAnswered > 0 ? Math.round((total.totalCorrect / total.totalAnswered) * 100) : 0;
+  const chaptersAvailable = indexData.length;
+
+  const renderWordLine = (w, icon) => {
+    const en  = w.type === 'verbs' ? w.entry.base : w.entry.en;
+    const de  = w.entry.de;
+    const tot = w.correct + w.wrong;
+    return `<div class="stats-word-row">${icon} <span class="stats-word-en">${en}</span><span class="stats-word-arrow"> → </span><span class="stats-word-de">${de}</span><span class="stats-word-score">(${w.correct}/${tot} richtig)</span></div>`;
+  };
+
+  const emptyHint = '<div class="stats-empty">Noch keine Daten (mind. 3 Antworten pro Vokabel)</div>';
+  const bestHTML  = bestWords.length  > 0 ? bestWords.map(w  => renderWordLine(w, '✅')).join('') : emptyHint;
+  const worstHTML = worstWords.length > 0
+    ? worstWords.map(w => renderWordLine(w, '❌')).join('') +
+      `<button class="btn-secondary mt-12" style="font-size:13px;padding:10px 14px;width:auto" onclick="startDifficultWordSession()">🎯 Jetzt üben</button>`
+    : emptyHint;
+
+  document.getElementById('app').innerHTML = `
+    <div class="screen active" id="screen-stats">
+      <div class="chapter-header">
+        <div class="chapter-header-top">
+          <h1>📚 Vokabeltrainer</h1>
+        </div>
+        <p class="chapter-header-subtitle">Deine Lernstatistiken</p>
+      </div>
+      <div class="tab-bar">
+        <button class="tab-btn" onclick="renderChapterScreen()">🏠 Lernen</button>
+        <button class="tab-btn tab-btn-active">📊 Statistiken</button>
+      </div>
+      <div class="stats-body">
+
+        <div class="stats-section">
+          <div class="stats-section-title">🔥 Streak</div>
+          <div class="stats-streak-value ${streakClass}">${total.currentStreak || 0} Tag${(total.currentStreak || 0) !== 1 ? 'e' : ''}</div>
+          <div class="stats-streak-sub">${streakStatus}</div>
+          <div class="stats-streak-sub mt-4">Längste Serie: ${total.longestStreak || 0} Tage</div>
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-section-header">
+            <div class="stats-section-title">📈 Lernfortschritt</div>
+            <div class="chart-toggle">
+              <button class="chart-toggle-btn chart-toggle-active" id="btn-chart-14" onclick="switchChart(14)">14 Tage</button>
+              <button class="chart-toggle-btn" id="btn-chart-30" onclick="switchChart(30)">30 Tage</button>
+            </div>
+          </div>
+          <div class="chart-container" id="chart-container">
+            ${buildChartHTML(14)}
+          </div>
+          <div class="chart-legend">
+            <span class="chart-legend-item"><span class="chart-legend-dot correct"></span> Richtig</span>
+            <span class="chart-legend-item"><span class="chart-legend-dot wrong"></span> Falsch</span>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-section-title">🎯 Gesamt</div>
+          <div class="stats-tiles">
+            <div class="stats-tile">
+              <div class="stats-tile-value">${total.totalAnswered || 0}</div>
+              <div class="stats-tile-label">Fragen<br>Gesamt</div>
+            </div>
+            <div class="stats-tile">
+              <div class="stats-tile-value">${pctCorrect}%</div>
+              <div class="stats-tile-label">Treffer-<br>quote</div>
+            </div>
+            <div class="stats-tile">
+              <div class="stats-tile-value">${chaptersAvailable}</div>
+              <div class="stats-tile-label">Kapitel<br>verfügbar</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-section-title">⭐ Beste Vokabeln (Top 5)</div>
+          ${bestHTML}
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-section-title">⚠️ Schwierigste Vokabeln (Top 5)</div>
+          ${worstHTML}
+        </div>
+
       </div>
     </div>`;
 }
