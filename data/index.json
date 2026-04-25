@@ -56,11 +56,25 @@
     "file": "data/unit2-story-checkin.json"
   },
   {
-    "id": "unit3-checkin",
+    "id": "unit3-checkout",
     "type": "vocab",
-    "title": "Unit 3 – Check-in",
-    "description": "The Emerald Isle – Irland, Klima, Geschichte",
-    "file": "data/unit3-checkin.json"
+    "title": "Unit 3 – Check-out",
+    "description": "The Emerald Isle – Geschichte, Heilige, Wikinger",
+    "file": "data/unit3-checkout.json"
+  },
+  {
+    "id": "unit3-stations",
+    "type": "vocab",
+    "title": "Unit 3 – Stations 1, 2 & 3",
+    "description": "Landschaft, Bergbau, Musik – Irland",
+    "file": "data/unit3-stations.json"
+  },
+  {
+    "id": "unit3-story-textsmart",
+    "type": "vocab",
+    "title": "Unit 3 – Story & Text Smart 2",
+    "description": "Bürgerrechte, Belfast, Sachliche Texte",
+    "file": "data/unit3-story-textsmart.json"
   },
   {
     "id": "irregular-verbs",
