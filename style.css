@@ -76,6 +76,31 @@ input { font-family: inherit; }
 .chapter-header h1 { font-size: 22px; font-weight: 700; }
 .chapter-header-subtitle { font-size: 13px; opacity: 0.8; margin-bottom: 14px; }
 
+/* Language selector */
+.language-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lang-btn {
+  flex: 1;
+  padding: 9px 8px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 44px;
+}
+.lang-btn.lang-btn-active {
+  background: white;
+  border-color: white;
+  color: var(--green);
+}
+
 /* Direction toggle */
 .direction-toggle {
   display: flex;

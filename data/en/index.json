@@ -4,83 +4,83 @@
     "type": "vocab",
     "title": "Across Cultures 1",
     "description": "The British Isles – Kultur, Essen, Dialekte",
-    "file": "data/unit1-across-cultures.json"
+    "file": "data/en/unit1-across-cultures.json"
   },
   {
     "id": "unit1-weekend-workshop",
     "type": "vocab",
     "title": "Unit 1 – The Weekend Workshop",
     "description": "Check-in, Station 1, 2 & 3 – Lifestyle, Community, Stadt & Land",
-    "file": "data/unit1-weekend-workshop.json"
+    "file": "data/en/unit1-weekend-workshop.json"
   },
   {
     "id": "unit1-checkout-story",
     "type": "vocab",
     "title": "Unit 1 – Check-out, Station 3 & Story",
     "description": "Check-out, Story – Kunst, Gefühle, Alltag",
-    "file": "data/unit1-checkout-story.json"
+    "file": "data/en/unit1-checkout-story.json"
   },
   {
     "id": "unit1-text-smart",
     "type": "vocab",
     "title": "Unit 1 – Text Smart 1",
     "description": "Lyrical Texts – Freundschaft, Gedichte, Literatur",
-    "file": "data/unit1-text-smart.json"
+    "file": "data/en/unit1-text-smart.json"
   },
   {
     "id": "unit2-welcome-station1",
     "type": "vocab",
     "title": "Unit 2 – Check-in & Station 1",
     "description": "Welcome to Wales – Bauernhof, Bergbau, Stadt & Land",
-    "file": "data/unit2-welcome-station1.json"
+    "file": "data/en/unit2-welcome-station1.json"
   },
   {
     "id": "unit2-station2",
     "type": "vocab",
     "title": "Unit 2 – Station 2",
     "description": "Kohlebergbau, Sicherheit, Industrie",
-    "file": "data/unit2-station2.json"
+    "file": "data/en/unit2-station2.json"
   },
   {
     "id": "unit2",
     "type": "vocab",
     "title": "Unit 2 – Station 3",
     "description": "Kelten, Geschichte, Reflexivpronomen",
-    "file": "data/unit2.json"
+    "file": "data/en/unit2.json"
   },
   {
     "id": "unit2-story-checkin",
     "type": "vocab",
     "title": "Unit 2 – Story & Welcome to Wales",
     "description": "Legenden, Drachen, Cardiff – Magie, Stadt",
-    "file": "data/unit2-story-checkin.json"
+    "file": "data/en/unit2-story-checkin.json"
   },
   {
     "id": "unit3-checkout",
     "type": "vocab",
     "title": "Unit 3 – Check-out",
     "description": "The Emerald Isle – Geschichte, Heilige, Wikinger",
-    "file": "data/unit3-checkout.json"
+    "file": "data/en/unit3-checkout.json"
   },
   {
     "id": "unit3-stations",
     "type": "vocab",
     "title": "Unit 3 – Stations 1, 2 & 3",
     "description": "Landschaft, Bergbau, Musik – Irland",
-    "file": "data/unit3-stations.json"
+    "file": "data/en/unit3-stations.json"
   },
   {
     "id": "unit3-story-textsmart",
     "type": "vocab",
     "title": "Unit 3 – Story & Text Smart 2",
     "description": "Bürgerrechte, Belfast, Sachliche Texte",
-    "file": "data/unit3-story-textsmart.json"
+    "file": "data/en/unit3-story-textsmart.json"
   },
   {
     "id": "irregular-verbs",
     "type": "verbs",
     "title": "Unregelmäßige Verben",
     "description": "Infinitiv, Simple Past, Past Participle",
-    "file": "data/irregular-verbs.json"
+    "file": "data/en/irregular-verbs.json"
   }
 ]

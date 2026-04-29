@@ -4,11 +4,12 @@
 const SRS_INTERVALS = [0, 1440, 4320, 10080]; // minutes per level
 
 // ===== STATE =====
-let indexData   = [];
-let chapterData = {}; // { id: parsed JSON }
-let selectedIds = new Set();
-let direction   = 'EN-DE';
-let currentMode = null;
+let indexData        = [];
+let chapterData      = {}; // { id: parsed JSON }
+let selectedIds      = new Set();
+let direction        = 'EN-DE';
+let currentMode      = null;
+let selectedLanguage = 'en'; // 'en' | 'es'
 
 // Session state
 let sessionCards   = [];
@@ -16,18 +17,72 @@ let sessionIdx     = 0;
 let sessionTotal   = 0;
 let sessionCorrect = 0;
 let sessionWrong   = 0;
-let cardState      = {}; // per-card rendering state
-let allPool        = []; // flat list of all cards from selected chapters (for MC distractors)
+let cardState      = {};
+let allPool        = [];
 let sessionType    = 'alles'; // 'alles' | 'kurztest' | 'schwach'
 
 // Stats state
 let statsWorstWords = [];
 
+// ===== LANGUAGE HELPERS =====
+
+function getLangFlag() {
+  return selectedLanguage === 'en' ? '🇬🇧' : '🇪🇸';
+}
+
+function getLangCode() {
+  return selectedLanguage.toUpperCase(); // 'EN' | 'ES'
+}
+
+function getLangName() {
+  return selectedLanguage === 'en' ? 'Englisch' : 'Spanisch';
+}
+
+function isForwardDirection() {
+  return direction.startsWith(getLangCode() + '-');
+}
+
+function getWordField() {
+  return selectedLanguage; // 'en' or 'es'
+}
+
+function getEntryId(entry, type) {
+  if (type === 'verbs') return entry.base;
+  return entry[selectedLanguage]; // entry.en or entry.es
+}
+
+// ===== LOCALSTORAGE MIGRATION =====
+// Migrates old keys (without language prefix) to new keys with 'en_' prefix
+
+function migrateLocalStorage() {
+  if (localStorage.getItem('ls_migrated_v1')) return;
+  const toMigrate = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k) continue;
+    if (k.startsWith('srs_') && !k.startsWith('srs_en_') && !k.startsWith('srs_es_')) {
+      toMigrate.push({ old: k, new_: 'srs_en_' + k.slice(4) });
+    } else if (k.startsWith('weak_') && !k.startsWith('weak_en_') && !k.startsWith('weak_es_')) {
+      toMigrate.push({ old: k, new_: 'weak_en_' + k.slice(5) });
+    } else if (k.startsWith('stats_') && !k.startsWith('stats_en_') && !k.startsWith('stats_es_')) {
+      toMigrate.push({ old: k, new_: 'stats_en_' + k.slice(6) });
+    }
+  }
+  for (const { old, new_ } of toMigrate) {
+    const val = localStorage.getItem(old);
+    if (val !== null) {
+      localStorage.setItem(new_, val);
+      localStorage.removeItem(old);
+    }
+  }
+  localStorage.setItem('ls_migrated_v1', '1');
+}
+
 // ===== SRS FUNCTIONS =====
 
 function srsKey(chapterId, type, id) {
-  if (type === 'verbs') return `srs_${chapterId}_verbs_${id}`;
-  return `srs_${chapterId}_${direction}_${id}`;
+  if (type === 'verbs') return `srs_${selectedLanguage}_${chapterId}_verbs_${id}`;
+  return `srs_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
 function getSRS(key) {
@@ -45,12 +100,11 @@ function updateSRS(key, rating) {
     srs.level = 0;
     srs.nextReview = now;
   } else if (rating === 1) {
-    // Schwer: half the current interval
     srs.nextReview = now + (SRS_INTERVALS[srs.level] || 0) * 30000;
   } else if (rating === 2) {
     srs.level = Math.min(srs.level + 1, 3);
     srs.nextReview = now + SRS_INTERVALS[srs.level] * 60000;
-  } else { // Perfekt
+  } else {
     srs.level = Math.min(srs.level + 2, 3);
     srs.nextReview = now + SRS_INTERVALS[srs.level] * 60000;
   }
@@ -65,7 +119,7 @@ function isLearned(key) {
 
 function getLearnedCount(chapterId, type, entries) {
   return entries.filter(e => {
-    const id = type === 'verbs' ? e.base : e.en;
+    const id = getEntryId(e, type);
     return isLearned(srsKey(chapterId, type, id));
   }).length;
 }
@@ -73,7 +127,7 @@ function getLearnedCount(chapterId, type, entries) {
 function getLastPracticed(chapterId, type, entries) {
   let max = 0;
   for (const e of entries) {
-    const id = type === 'verbs' ? e.base : e.en;
+    const id = getEntryId(e, type);
     const s = getSRS(srsKey(chapterId, type, id));
     if (s && s.lastPracticed > max) max = s.lastPracticed;
   }
@@ -92,8 +146,8 @@ function formatDate(ts) {
 // ===== WEAK SCORE =====
 
 function weakKey(chapterId, type, id) {
-  if (type === 'verbs') return `weak_${chapterId}_verbs_${id}`;
-  return `weak_${chapterId}_${direction}_${id}`;
+  if (type === 'verbs') return `weak_${selectedLanguage}_${chapterId}_verbs_${id}`;
+  return `weak_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
 function getWeak(key) {
@@ -106,7 +160,7 @@ function setWeak(key, val) {
 
 function applyWeakUpdate(card, isCorrect) {
   if (sessionType === 'alles') return;
-  const id = card.type === 'verbs' ? card.entry.base : card.entry.en;
+  const id = getEntryId(card.entry, card.type);
   const wk = weakKey(card.chapterId, card.type, id);
   const cur = getWeak(wk);
   if (sessionType === 'kurztest') {
@@ -118,7 +172,7 @@ function applyWeakUpdate(card, isCorrect) {
 
 function getWeakCount(chapterId, type, entries) {
   return entries.filter(e => {
-    const id = type === 'verbs' ? e.base : e.en;
+    const id = getEntryId(e, type);
     return getWeak(weakKey(chapterId, type, id)) >= 1;
   }).length;
 }
@@ -130,7 +184,7 @@ function getTotalWeakCount() {
     const data = chapterData[info.id];
     const entries = data.type === 'verbs' ? data.verbs : data.vocab;
     for (const entry of entries) {
-      const id = data.type === 'verbs' ? entry.base : entry.en;
+      const id = getEntryId(entry, data.type);
       if (getWeak(weakKey(info.id, data.type, id)) >= 1) count++;
     }
   }
@@ -151,8 +205,9 @@ function yesterdayDateStr() {
 }
 
 function getStatsTotal() {
+  const key = `stats_${selectedLanguage}_total`;
   try {
-    return JSON.parse(localStorage.getItem('stats_total')) ||
+    return JSON.parse(localStorage.getItem(key)) ||
       { totalAnswered: 0, totalCorrect: 0, currentStreak: 0, lastLearnedDate: '', longestStreak: 0 };
   } catch {
     return { totalAnswered: 0, totalCorrect: 0, currentStreak: 0, lastLearnedDate: '', longestStreak: 0 };
@@ -162,8 +217,7 @@ function getStatsTotal() {
 function recordAnswer(card, isCorrect) {
   const today = todayDateStr();
 
-  // a) Day log
-  const dayKey = `stats_day_${today}`;
+  const dayKey = `stats_${selectedLanguage}_day_${today}`;
   let dayData;
   try { dayData = JSON.parse(localStorage.getItem(dayKey)) || { correct: 0, wrong: 0, total: 0 }; }
   catch { dayData = { correct: 0, wrong: 0, total: 0 }; }
@@ -173,16 +227,15 @@ function recordAnswer(card, isCorrect) {
 
   pruneOldDayStats();
 
-  // b) Word tracking
-  const wordId = card.type === 'verbs' ? card.entry.base : card.entry.en;
-  const wordKey = `stats_word_${card.chapterId}_${wordId}`;
+  const wordId = getEntryId(card.entry, card.type);
+  const wordKey = `stats_${selectedLanguage}_word_${card.chapterId}_${wordId}`;
   let wordData;
   try { wordData = JSON.parse(localStorage.getItem(wordKey)) || { correct: 0, wrong: 0 }; }
   catch { wordData = { correct: 0, wrong: 0 }; }
   if (isCorrect) wordData.correct++; else wordData.wrong++;
   try { localStorage.setItem(wordKey, JSON.stringify(wordData)); } catch {}
 
-  // c) Total stats + streak
+  const totalKey = `stats_${selectedLanguage}_total`;
   const total = getStatsTotal();
   total.totalAnswered++;
   if (isCorrect) total.totalCorrect++;
@@ -196,14 +249,15 @@ function recordAnswer(card, isCorrect) {
   total.lastLearnedDate = today;
   if (total.currentStreak > (total.longestStreak || 0)) total.longestStreak = total.currentStreak;
 
-  try { localStorage.setItem('stats_total', JSON.stringify(total)); } catch {}
+  try { localStorage.setItem(totalKey, JSON.stringify(total)); } catch {}
 }
 
 function pruneOldDayStats() {
+  const prefix = `stats_${selectedLanguage}_day_`;
   const keys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith('stats_day_')) keys.push(k);
+    if (k && k.startsWith(prefix)) keys.push(k);
   }
   if (keys.length <= 30) return;
   keys.sort();
@@ -218,7 +272,7 @@ function getDayRange(days) {
     d.setDate(d.getDate() - i);
     const str = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     let dayData;
-    try { dayData = JSON.parse(localStorage.getItem(`stats_day_${str}`)) || { correct: 0, wrong: 0, total: 0 }; }
+    try { dayData = JSON.parse(localStorage.getItem(`stats_${selectedLanguage}_day_${str}`)) || { correct: 0, wrong: 0, total: 0 }; }
     catch { dayData = { correct: 0, wrong: 0, total: 0 }; }
     result.push({ str, label: dayNames[d.getDay()], ...dayData });
   }
@@ -226,19 +280,20 @@ function getDayRange(days) {
 }
 
 function getAllWordStats() {
+  const prefix = `stats_${selectedLanguage}_word_`;
   const results = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (!k || !k.startsWith('stats_word_')) continue;
-    const rest = k.slice('stats_word_'.length);
+    if (!k || !k.startsWith(prefix)) continue;
+    const rest = k.slice(prefix.length);
     for (const info of indexData) {
-      const prefix = info.id + '_';
-      if (rest.startsWith(prefix)) {
-        const wordId = rest.slice(prefix.length);
+      const pfx = info.id + '_';
+      if (rest.startsWith(pfx)) {
+        const wordId = rest.slice(pfx.length);
         const d = chapterData[info.id];
         if (!d) break;
         const entries = d.type === 'verbs' ? d.verbs : d.vocab;
-        const entry = entries.find(e => (d.type === 'verbs' ? e.base : e.en) === wordId);
+        const entry = entries.find(e => getEntryId(e, d.type) === wordId);
         if (entry) {
           let data;
           try { data = JSON.parse(localStorage.getItem(k)) || { correct: 0, wrong: 0 }; }
@@ -272,6 +327,8 @@ function levenshtein(a, b) {
 function normalize(s) {
   return (s || '').toLowerCase()
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/á/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i').replace(/ó/g, 'o').replace(/ú/g, 'u')
+    .replace(/ñ/g, 'n')
     .replace(/[()[\]{}"']/g, '').trim();
 }
 
@@ -285,7 +342,6 @@ function checkAnswer(input, correct) {
   const parts     = correct.split(/[;\/]/).map(p => p.trim()).filter(Boolean);
   const normParts = parts.map(normalize);
 
-  // Partial match: typed one of the semicolon-separated parts (min 3 chars)
   if (parts.length > 1) {
     for (let i = 0; i < normParts.length; i++) {
       if (ni === normParts[i] && ni.length >= 3) {
@@ -294,7 +350,6 @@ function checkAnswer(input, correct) {
     }
   }
 
-  // Typo tolerance
   const allForms = [normFull, ...normParts];
   const allOrig  = [correct.trim(), ...parts];
   for (let i = 0; i < allForms.length; i++) {
@@ -319,9 +374,38 @@ async function loadChapterFile(info) {
   return data;
 }
 
+async function loadIndexForLanguage(lang) {
+  try {
+    const resp = await fetch(`data/${lang}/index.json`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    indexData = await resp.json();
+  } catch {
+    indexData = [];
+  }
+}
+
+// ===== LANGUAGE SWITCH =====
+
+async function setLanguage(lang) {
+  if (lang === selectedLanguage) return;
+  const wasForward = isForwardDirection();
+  selectedLanguage = lang;
+  localStorage.setItem('selected_language', lang);
+  direction = wasForward ? `${getLangCode()}-DE` : `DE-${getLangCode()}`;
+  selectedIds.clear();
+  chapterData = {};
+  await loadIndexForLanguage(lang);
+  await renderChapterScreen();
+}
+
 // ===== CHAPTER SELECTION SCREEN =====
 
 async function renderChapterScreen() {
+  const langCode = getLangCode();
+  const flag     = getLangFlag();
+  const fwdDir   = `${langCode}-DE`;
+  const bwdDir   = `DE-${langCode}`;
+
   document.getElementById('app').innerHTML = `
     <div class="screen active" id="screen-chapters">
       <div class="chapter-header">
@@ -329,9 +413,13 @@ async function renderChapterScreen() {
           <h1>📚 Vokabeltrainer</h1>
         </div>
         <p class="chapter-header-subtitle">Kapitel und Lernrichtung wählen</p>
+        <div class="language-selector">
+          <button class="lang-btn${selectedLanguage==='en'?' lang-btn-active':''}" onclick="setLanguage('en')">🇬🇧 Englisch</button>
+          <button class="lang-btn${selectedLanguage==='es'?' lang-btn-active':''}" onclick="setLanguage('es')">🇪🇸 Spanisch</button>
+        </div>
         <div class="direction-toggle">
-          <button id="btn-en-de" class="${direction==='EN-DE'?'active':''}" onclick="setDirection('EN-DE')">🇬🇧 EN → 🇩🇪 DE</button>
-          <button id="btn-de-en" class="${direction==='DE-EN'?'active':''}" onclick="setDirection('DE-EN')">🇩🇪 DE → 🇬🇧 EN</button>
+          <button id="btn-fwd" class="${direction===fwdDir?'active':''}" onclick="setDirection('${fwdDir}')">${flag} ${langCode} → 🇩🇪 DE</button>
+          <button id="btn-bwd" class="${direction===bwdDir?'active':''}" onclick="setDirection('${bwdDir}')">🇩🇪 DE → ${flag} ${langCode}</button>
         </div>
       </div>
       <div class="tab-bar">
@@ -355,6 +443,12 @@ async function renderChapterScreen() {
     </div>`;
 
   const list = document.getElementById('chapter-list');
+
+  if (indexData.length === 0) {
+    list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)">Noch keine ${getLangName()}-Kapitel vorhanden.</div>`;
+    return;
+  }
+
   list.innerHTML = '';
 
   for (const info of indexData) {
@@ -434,10 +528,11 @@ function updateSelectAllIcon() {
 
 function setDirection(dir) {
   direction = dir;
-  const enBtn = document.getElementById('btn-en-de');
-  const deBtn = document.getElementById('btn-de-en');
-  if (enBtn) enBtn.classList.toggle('active', dir === 'EN-DE');
-  if (deBtn) deBtn.classList.toggle('active', dir === 'DE-EN');
+  const fwdDir = `${getLangCode()}-DE`;
+  const fwdBtn = document.getElementById('btn-fwd');
+  const bwdBtn = document.getElementById('btn-bwd');
+  if (fwdBtn) fwdBtn.classList.toggle('active', dir === fwdDir);
+  if (bwdBtn) bwdBtn.classList.toggle('active', dir !== fwdDir);
 }
 
 // ===== SESSION TYPE PICKER =====
@@ -540,6 +635,12 @@ function goToModeScreen() {
       return sum + (d.type === 'verbs' ? d.verbs.length : d.vocab.length);
     }, 0);
 
+  const langCode = getLangCode();
+  const flag     = getLangFlag();
+  const dirLabel = isForwardDirection()
+    ? `${flag} ${langCode} → 🇩🇪 DE`
+    : `🇩🇪 DE → ${flag} ${langCode}`;
+
   document.getElementById('app').innerHTML = `
     <div class="screen active" id="screen-modes">
       <div class="screen-header">
@@ -549,7 +650,7 @@ function goToModeScreen() {
       <div class="mode-screen-body">
         <div class="mode-screen-info">
           <strong>${selectedIds.size} Kapitel</strong> · <strong>${totalEntries} Einträge</strong><br>
-          Richtung: <strong>${direction === 'EN-DE' ? '🇬🇧 EN → 🇩🇪 DE' : '🇩🇪 DE → 🇬🇧 EN'}</strong>
+          Richtung: <strong>${dirLabel}</strong>
           ${mixed ? ' · <em>Gemischte Auswahl</em>' : ''}
         </div>
         <div class="mode-grid">
@@ -587,14 +688,13 @@ function buildSessionCards(mode) {
     const entries = data.type === 'verbs' ? data.verbs : data.vocab;
 
     for (const entry of entries) {
-      const id  = data.type === 'verbs' ? entry.base : entry.en;
+      const id  = getEntryId(entry, data.type);
       const key = srsKey(info.id, data.type, id);
       const srs = getSRS(key) || { level: 0, nextReview: 0 };
       const card = { entry, chapterId: info.id, type: data.type, key, srs };
 
       allPool.push(card);
 
-      // Gap text: skip vocab entries with no example sentence
       if (mode === 'gap' && data.type === 'vocab' && !entry.ex) continue;
 
       if (srs.nextReview <= now) {
@@ -617,7 +717,7 @@ function buildKurztestCards() {
     if (!data) continue;
     const entries = data.type === 'verbs' ? data.verbs : data.vocab;
     for (const entry of entries) {
-      const id   = data.type === 'verbs' ? entry.base : entry.en;
+      const id   = getEntryId(entry, data.type);
       const key  = srsKey(info.id, data.type, id);
       const srs  = getSRS(key) || { level: 0, nextReview: 0 };
       const weak = getWeak(weakKey(info.id, data.type, id));
@@ -637,20 +737,15 @@ function buildKurztestCards() {
     }
   }
 
-  // Priority 1: high weak score (often wrong)
   addBatch(allPool.filter(c => c.weak >= 2));
-  // Priority 2: never practiced
   addBatch(allPool.filter(c => c.srs.level === 0 && !c.srs.lastPracticed));
-  // Priority 3: level 1 (unsicher)
   addBatch(allPool.filter(c => c.srs.level === 1));
-  // Priority 4: oldest reviewed
   const oldest = allPool
     .filter(c => !seen.has(c.key))
     .sort((a, b) => (a.srs.lastPracticed || 0) - (b.srs.lastPracticed || 0));
   for (const c of oldest) {
     if (!seen.has(c.key) && result.length < 20) { seen.add(c.key); result.push(c); }
   }
-  // Priority 5: random fill
   addBatch(allPool.filter(c => !seen.has(c.key)));
 
   return result;
@@ -665,7 +760,7 @@ function buildWeakCards(mode) {
     if (!data) continue;
     const entries = data.type === 'verbs' ? data.verbs : data.vocab;
     for (const entry of entries) {
-      const id  = data.type === 'verbs' ? entry.base : entry.en;
+      const id  = getEntryId(entry, data.type);
       const key = srsKey(info.id, data.type, id);
       const srs = getSRS(key) || { level: 0, nextReview: 0 };
       const wk  = getWeak(weakKey(info.id, data.type, id));
@@ -683,7 +778,6 @@ function buildWeakCards(mode) {
 async function startSession(mode) {
   currentMode = mode;
 
-  // Ensure all selected chapter data is loaded
   for (const info of indexData) {
     if (selectedIds.has(info.id) && !chapterData[info.id]) {
       await loadChapterFile(info);
@@ -754,7 +848,6 @@ function renderCurrentCard() {
   cardState = {};
   const card = sessionCards[sessionIdx];
 
-  // Mixed session mode mapping
   let mode = currentMode;
   if (mode === 'typing' && card.type === 'verbs') mode = 'chain';
   if (mode === 'chain'  && card.type === 'vocab') mode = 'typing';
@@ -796,19 +889,26 @@ function renderFlashcard(card) {
   let front, back;
 
   if (card.type === 'vocab') {
-    if (direction === 'EN-DE') {
-      front = `<div class="flashcard-label">Englisch</div>
-               <div class="flashcard-word">${e.en}</div>
-               <div class="flashcard-phonetic">${e.ph}</div>`;
-      back  = `<div class="flashcard-label">Deutsch</div>
+    const wf      = getWordField(); // 'en' or 'es'
+    const word    = e[wf];
+    const flag    = getLangFlag();
+    const lc      = getLangCode();
+    const forward = isForwardDirection();
+    const ph      = (selectedLanguage === 'en' && e.ph) ? `<div class="flashcard-phonetic">${e.ph}</div>` : '';
+
+    if (forward) {
+      front = `<div class="flashcard-label">${flag} ${lc}</div>
+               <div class="flashcard-word">${word}</div>
+               ${ph}`;
+      back  = `<div class="flashcard-label">🇩🇪 Deutsch</div>
                <div class="flashcard-translation">${e.de}</div>
                ${e.ex ? `<div class="flashcard-phonetic" style="font-size:13px;margin-top:12px">&ldquo;${e.ex}&rdquo;</div>` : ''}`;
     } else {
-      front = `<div class="flashcard-label">Deutsch</div>
+      front = `<div class="flashcard-label">🇩🇪 Deutsch</div>
                <div class="flashcard-word">${e.de}</div>`;
-      back  = `<div class="flashcard-label">Englisch</div>
-               <div class="flashcard-translation">${e.en}</div>
-               <div class="flashcard-phonetic">${e.ph}</div>`;
+      back  = `<div class="flashcard-label">${flag} ${lc}</div>
+               <div class="flashcard-translation">${word}</div>
+               ${ph}`;
     }
   } else {
     front = `<div class="flashcard-label">Infinitiv</div>
@@ -816,7 +916,7 @@ function renderFlashcard(card) {
              <div class="flashcard-phonetic">${e.ph_base}</div>
              <div class="flashcard-de" style="margin-top:8px">${e.de}</div>`;
     back  = `<div class="flashcard-label">Alle 3 Formen</div>
-             <div class="flashcard-forms">${e.base.toUpperCase()}<br>↓<br>${(e.past).toUpperCase()}<br>↓<br>${e.participle.toUpperCase()}</div>`;
+             <div class="flashcard-forms">${e.base.toUpperCase()}<br>↓<br>${e.past.toUpperCase()}<br>↓<br>${e.participle.toUpperCase()}</div>`;
   }
 
   document.getElementById('session-content').innerHTML = `
@@ -865,21 +965,28 @@ function renderMC(card) {
   let questionHTML, options, correctAns;
 
   if (card.type === 'vocab') {
-    correctAns = direction === 'EN-DE' ? e.de : e.en;
-    const field = direction === 'EN-DE' ? 'de' : 'en';
+    const wf      = getWordField();
+    const flag    = getLangFlag();
+    const lc      = getLangCode();
+    const forward = isForwardDirection();
+    const qField  = forward ? wf : 'de';
+    const aField  = forward ? 'de' : wf;
+    correctAns = e[aField];
+
     const distractors = shuffle(
       allPool
         .filter(p => p.type === 'vocab' && p.entry !== e)
-        .map(p => p.entry[field])
+        .map(p => p.entry[aField])
         .filter((v, i, a) => v && a.indexOf(v) === i && v !== correctAns)
     ).slice(0, 3);
 
     options = shuffle([correctAns, ...distractors]);
-    questionHTML = direction === 'EN-DE'
-      ? `<div class="mc-question-sub">Englisch → Deutsch</div>
-         <div class="mc-question-word">${e.en}</div>
-         <div class="mc-question-phonetic">${e.ph}</div>`
-      : `<div class="mc-question-sub">Deutsch → Englisch</div>
+    const ph = (forward && selectedLanguage === 'en' && e.ph) ? `<div class="mc-question-phonetic">${e.ph}</div>` : '';
+    questionHTML = forward
+      ? `<div class="mc-question-sub">${flag} ${lc} → 🇩🇪 DE</div>
+         <div class="mc-question-word">${e[wf]}</div>
+         ${ph}`
+      : `<div class="mc-question-sub">🇩🇪 DE → ${flag} ${lc}</div>
          <div class="mc-question-word">${e.de}</div>`;
 
   } else {
@@ -955,11 +1062,15 @@ function selectMCOption(idx) {
 // ===== TYPING MODE =====
 
 function renderTyping(card) {
-  const e = card.entry;
-  const label = direction === 'EN-DE' ? 'Englisch → Deutsch' : 'Deutsch → Englisch';
-  const word  = direction === 'EN-DE' ? e.en : e.de;
-  const ph    = (direction === 'EN-DE' && e.ph) ? `<div class="typing-phonetic">${e.ph}</div>` : '';
-  const placeholder = direction === 'EN-DE' ? 'Deutsche Übersetzung…' : 'Englisches Wort…';
+  const e       = card.entry;
+  const wf      = getWordField();
+  const flag    = getLangFlag();
+  const lc      = getLangCode();
+  const forward = isForwardDirection();
+  const label   = forward ? `${flag} ${lc} → 🇩🇪 DE` : `🇩🇪 DE → ${flag} ${lc}`;
+  const word    = forward ? e[wf] : e.de;
+  const ph      = (forward && selectedLanguage === 'en' && e.ph) ? `<div class="typing-phonetic">${e.ph}</div>` : '';
+  const placeholder = forward ? 'Deutsche Übersetzung…' : `${getLangName()} Übersetzung…`;
 
   document.getElementById('session-content').innerHTML = `
     <div class="typing-question">
@@ -986,7 +1097,9 @@ function submitTyping() {
   if (!input || input.disabled) return;
 
   const card    = sessionCards[sessionIdx];
-  const correct = direction === 'EN-DE' ? card.entry.de : card.entry.en;
+  const wf      = getWordField();
+  const forward = isForwardDirection();
+  const correct = forward ? card.entry.de : card.entry[wf];
   const result  = checkAnswer(input.value, correct);
 
   input.disabled = true;
@@ -1039,8 +1152,10 @@ function renderPronunciation(card) {
   const e = card.entry;
   let spokenText, correctAns, optField, optPool;
 
+  const speechLang = selectedLanguage === 'en' ? 'en-GB' : 'es-ES';
+
   if (card.type === 'vocab') {
-    spokenText = e.en;
+    spokenText = e[getWordField()]; // e.en or e.es
     correctAns = e.de;
     optField   = 'de';
     optPool    = allPool.filter(p => p.type === 'vocab' && p.entry !== e);
@@ -1062,13 +1177,14 @@ function renderPronunciation(card) {
   cardState.pronCorrect  = correctAns;
   cardState.pronSpoken   = spokenText;
   cardState.pronSelected = null;
+  cardState.pronLang     = speechLang;
 
   const label = card.type === 'vocab' ? 'Deutsche Bedeutung wählen:' : 'Welches Verb wurde gesprochen?';
   const safeText = spokenText.replace(/'/g, "\\'");
 
   document.getElementById('session-content').innerHTML = `
     <div class="pron-display">
-      <button class="pron-play-btn" onclick="speak('${safeText}','en-GB',0.85)">🔊</button>
+      <button class="pron-play-btn" onclick="speak('${safeText}','${speechLang}',0.85)">🔊</button>
       <div class="pron-question">${label}</div>
       <div class="pron-hint">Zum Wiederholen auf 🔊 tippen</div>
     </div>
@@ -1079,7 +1195,7 @@ function renderPronunciation(card) {
     </div>
     <div id="pron-feedback" class="hidden"></div>`;
 
-  setTimeout(() => speak(spokenText, 'en-GB', 0.85), 400);
+  setTimeout(() => speak(spokenText, speechLang, 0.85), 400);
 }
 
 function selectPronOption(idx) {
@@ -1121,14 +1237,12 @@ function selectPronOption(idx) {
 
 // ===== GAP TEXT MODE =====
 
-function makeGapSentence(ex, en) {
-  // Extract the key word: strip "to ", take first part before separator
-  const word    = en.replace(/^to\s+/i, '').split(/[;,\/]/)[0].trim();
+function makeGapSentence(ex, targetWord) {
+  const word    = targetWord.replace(/^to\s+/i, '').split(/[;,\/]/)[0].trim();
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex   = new RegExp(`\\b${escaped}(?:s|es|ed|ing|'s)?\\b`, 'gi');
+  const regex   = new RegExp(`\\b${escaped}(?:s|es|ed|ing|'s|ndo|ando|ando)?\\b`, 'gi');
   const result  = ex.replace(regex, '<span class="gap-blank">___</span>');
   if (result !== ex) return result;
-  // Fallback: replace first occurrence anywhere
   const idx = ex.toLowerCase().indexOf(word.toLowerCase());
   if (idx >= 0) {
     return ex.slice(0, idx) + '<span class="gap-blank">___</span>' + ex.slice(idx + word.length);
@@ -1141,16 +1255,17 @@ function renderGap(card) {
   let displayHTML, correctAns, placeholder;
 
   if (card.type === 'vocab') {
-    const gapped = makeGapSentence(e.ex, e.en);
-    correctAns   = e.en.replace(/^to\s+/i, '').split(/[;,\/]/)[0].trim();
-    placeholder  = 'Englisches Wort…';
+    const wf     = getWordField(); // 'en' or 'es'
+    const word   = e[wf];
+    const gapped = makeGapSentence(e.ex, word);
+    correctAns   = word.replace(/^to\s+/i, '').split(/[;,\/]/)[0].trim();
+    placeholder  = selectedLanguage === 'en' ? 'Englisches Wort…' : 'Spanisches Wort…';
     displayHTML  = `
       <div class="gap-display">
         <div class="gap-sentence">${gapped}</div>
         <div class="gap-hint mt-8">🇩🇪 ${e.de}</div>
       </div>`;
   } else {
-    // Verb: blank either past or participle randomly
     const blankPast = Math.random() < 0.5;
     correctAns = blankPast
       ? e.past.split('/')[0].trim()
@@ -1242,10 +1357,9 @@ function submitGap() {
 function renderChain(card) {
   const e = card.entry;
 
-  // Initialize chain state on first render of this card
   if (cardState.chainInit !== card.key) {
     cardState.chainInit  = card.key;
-    cardState.chainStep  = 0; // 0=ask past, 1=ask participle
+    cardState.chainStep  = 0;
     cardState.chainError = false;
     cardState.chainPast  = null;
   }
@@ -1255,7 +1369,6 @@ function renderChain(card) {
   const label  = isPast ? 'Simple Past' : 'Past Participle';
   const placeholder = isPast ? 'Simple Past…' : 'Past Participle…';
 
-  // Build the "go → ___ → gone" display
   const knownPast = cardState.chainPast;
   const pastHTML  = isPast
     ? '<span class="chain-blank">___</span>'
@@ -1322,13 +1435,11 @@ function submitChain() {
   const delay = result.ok ? 900 : 1800;
 
   if (isPast) {
-    // Move to participle step
     setTimeout(() => {
       cardState.chainStep = 1;
       renderChain(card);
     }, delay);
   } else {
-    // Both steps done → rate and advance
     setTimeout(() => {
       const rating = cardState.chainError ? 2 : 3;
       applyWeakUpdate(card, !cardState.chainError);
@@ -1450,7 +1561,7 @@ function startDifficultWordSession() {
   sessionType = 'alles';
   currentMode = 'typing';
   sessionCards = statsWorstWords.map(w => {
-    const id = w.type === 'verbs' ? w.entry.base : w.entry.en;
+    const id = getEntryId(w.entry, w.type);
     const key = srsKey(w.chapterId, w.type, id);
     return { entry: w.entry, chapterId: w.chapterId, type: w.type, key, srs: getSRS(key) || { level: 0, nextReview: 0 } };
   });
@@ -1491,10 +1602,10 @@ function renderStatsScreen() {
   const chaptersAvailable = indexData.length;
 
   const renderWordLine = (w, icon) => {
-    const en  = w.type === 'verbs' ? w.entry.base : w.entry.en;
+    const wordId = getEntryId(w.entry, w.type);
     const de  = w.entry.de;
     const tot = w.correct + w.wrong;
-    return `<div class="stats-word-row">${icon} <span class="stats-word-en">${en}</span><span class="stats-word-arrow"> → </span><span class="stats-word-de">${de}</span><span class="stats-word-score">(${w.correct}/${tot} richtig)</span></div>`;
+    return `<div class="stats-word-row">${icon} <span class="stats-word-en">${wordId}</span><span class="stats-word-arrow"> → </span><span class="stats-word-de">${de}</span><span class="stats-word-score">(${w.correct}/${tot} richtig)</span></div>`;
   };
 
   const emptyHint = '<div class="stats-empty">Noch keine Daten (mind. 3 Antworten pro Vokabel)</div>';
@@ -1510,7 +1621,7 @@ function renderStatsScreen() {
         <div class="chapter-header-top">
           <h1>📚 Vokabeltrainer</h1>
         </div>
-        <p class="chapter-header-subtitle">Deine Lernstatistiken</p>
+        <p class="chapter-header-subtitle">Statistiken – ${getLangName()} ${getLangFlag()}</p>
       </div>
       <div class="tab-bar">
         <button class="tab-btn" onclick="renderChapterScreen()">🏠 Lernen</button>
@@ -1577,6 +1688,8 @@ function renderStatsScreen() {
 // ===== INIT =====
 
 async function init() {
+  migrateLocalStorage();
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => {
       reg.update();
@@ -1591,16 +1704,10 @@ async function init() {
     }).catch(() => {});
   }
 
-  try {
-    const resp = await fetch('data/index.json');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    indexData = await resp.json();
-  } catch {
-    document.getElementById('app').innerHTML =
-      '<div class="loading"><p style="color:#ef4444">❌ data/index.json konnte nicht geladen werden.</p></div>';
-    return;
-  }
+  selectedLanguage = localStorage.getItem('selected_language') || 'en';
+  direction = `${getLangCode()}-DE`;
 
+  await loadIndexForLanguage(selectedLanguage);
   await renderChapterScreen();
 }
 
