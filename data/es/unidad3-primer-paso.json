@@ -1,0 +1,20 @@
+{
+  "id": "unidad3-primer-paso",
+  "type": "vocab",
+  "language": "es",
+  "title": "Unidad 3 – Primer Paso",
+  "description": "Gefühle, Meinungen, Musik",
+  "vocab": [
+    {"es":"alegre","de":"fröhlich","ex":"Elisa es una chica muy alegre."},
+    {"es":"triste","de":"traurig","ex":"Es una película triste."},
+    {"es":"feo, -a","de":"hässlich","ex":""},
+    {"es":"aburrido, -a","de":"langweilig","ex":""},
+    {"es":"que da miedo","de":"beängstigend","ex":""},
+    {"es":"Me parece(n)...","de":"Ich finde ...","ex":"La canción me parece muy bonita."},
+    {"es":"¿Y a ti?","de":"Und dir?; Und du?","ex":"Me gusta la música rock. ¿Y a ti?"},
+    {"es":"pues","de":"also","ex":"La película me parece muy interesante. ¿Y a ti? Pues a mí, no."},
+    {"es":"el fragmento","de":"der Ausschnitt","ex":"Uso un fragmento de la canción para un vídeo en mis redes sociales."},
+    {"es":"el carnaval","de":"der Karneval","ex":""},
+    {"es":"la flor","de":"die Blume","ex":""}
+  ]
+}

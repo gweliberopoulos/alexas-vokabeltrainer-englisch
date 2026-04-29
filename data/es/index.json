@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "id": "unidad3-primer-paso",
+    "type": "vocab",
+    "language": "es",
+    "title": "Unidad 3 – Primer Paso",
+    "description": "Gefühle, Meinungen, Musik",
+    "file": "data/es/unidad3-primer-paso.json"
+  },
+  {
+    "id": "unidad3-bloque-a",
+    "type": "vocab",
+    "language": "es",
+    "title": "Unidad 3 – Bloque A",
+    "description": "Karneval, Día de los Muertos, Fotos beschreiben",
+    "file": "data/es/unidad3-bloque-a.json"
+  },
+  {
+    "id": "unidad3-bloque-b",
+    "type": "vocab",
+    "language": "es",
+    "title": "Unidad 3 – Bloque B",
+    "description": "Restaurant, Essen bestellen, Bezahlen",
+    "file": "data/es/unidad3-bloque-b.json"
+  }
+]
