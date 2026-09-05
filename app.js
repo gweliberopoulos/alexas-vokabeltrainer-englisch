@@ -5,6 +5,8 @@ const SRS_INTERVALS = [0, 1440, 4320, 10080]; // minutes per level
 
 // ===== STATE =====
 let indexData        = [];
+let archivData       = []; // Klasse-7-Archiv (nur Englisch)
+let archivOpen       = false;
 let chapterData      = {}; // { id: parsed JSON }
 let selectedIds      = new Set();
 let direction        = 'EN-DE';
@@ -179,7 +181,7 @@ function getWeakCount(chapterId, type, entries) {
 
 function getTotalWeakCount() {
   let count = 0;
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id) || !chapterData[info.id]) continue;
     const data = chapterData[info.id];
     const entries = data.type === 'verbs' ? data.verbs : data.vocab;
@@ -286,7 +288,7 @@ function getAllWordStats() {
     const k = localStorage.key(i);
     if (!k || !k.startsWith(prefix)) continue;
     const rest = k.slice(prefix.length);
-    for (const info of indexData) {
+    for (const info of getAllChapterInfos()) {
       const pfx = info.id + '_';
       if (rest.startsWith(pfx)) {
         const wordId = rest.slice(pfx.length);
@@ -382,6 +384,22 @@ async function loadIndexForLanguage(lang) {
   } catch {
     indexData = [];
   }
+  await loadArchivIndex(lang);
+}
+
+async function loadArchivIndex(lang) {
+  if (lang !== 'en') { archivData = []; return; }
+  try {
+    const resp = await fetch('data/en/archiv/index.json');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    archivData = await resp.json();
+  } catch {
+    archivData = [];
+  }
+}
+
+function getAllChapterInfos() {
+  return [...indexData, ...archivData];
 }
 
 // ===== LANGUAGE SWITCH =====
@@ -444,7 +462,7 @@ async function renderChapterScreen() {
 
   const list = document.getElementById('chapter-list');
 
-  if (indexData.length === 0) {
+  if (indexData.length === 0 && archivData.length === 0) {
     list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)">Noch keine ${getLangName()}-Kapitel vorhanden.</div>`;
     return;
   }
@@ -452,43 +470,75 @@ async function renderChapterScreen() {
   list.innerHTML = '';
 
   for (const info of indexData) {
-    const data    = await loadChapterFile(info);
-    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
-    const total   = entries.length;
-    const learned = getLearnedCount(info.id, data.type, entries);
-    const lastTs  = getLastPracticed(info.id, data.type, entries);
-    const pct     = total > 0 ? Math.round((learned / total) * 100) : 0;
-    const weak    = getWeakCount(info.id, data.type, entries);
-    const sel     = selectedIds.has(info.id);
-    const badge   = data.type === 'verbs'
-      ? `<span class="badge badge-verbs">Verben</span>`
-      : `<span class="badge badge-vocab">Vokabeln</span>`;
-
-    const card = document.createElement('div');
-    card.className = `chapter-card${sel ? ' selected' : ''}`;
-    card.dataset.id = info.id;
-    card.onclick = () => toggleChapter(info.id);
-    card.innerHTML = `
-      <div class="chapter-card-checkbox">${sel ? '✓' : ''}</div>
-      <div class="chapter-card-body">
-        <div class="chapter-card-title-row">
-          <span class="chapter-card-title">${info.title}</span>
-          ${badge}
-        </div>
-        <div class="chapter-card-desc">${info.description}</div>
-        <div class="chapter-card-meta">
-          <span>${learned}/${total} gelernt</span>
-          <span>Zuletzt: ${formatDate(lastTs)}</span>
-        </div>
-        <div class="chapter-progress-wrap">
-          <div class="chapter-progress-bar">
-            <div class="chapter-progress-fill" style="width:${pct}%"></div>
-          </div>
-          ${weak > 0 ? `<div class="chapter-weak-hint">⚠️ ${weak} schwache Vokabeln</div>` : ''}
-        </div>
-      </div>`;
-    list.appendChild(card);
+    list.appendChild(await buildChapterCardEl(info));
   }
+
+  if (archivData.length > 0) {
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'archiv-toggle-row';
+    toggleRow.onclick = toggleArchiv;
+    toggleRow.innerHTML = `
+      <span>📦 Archiv – Klasse 7</span>
+      <span id="archiv-toggle-icon">${archivOpen ? '▲ verbergen' : '▼ anzeigen'}</span>`;
+    list.appendChild(toggleRow);
+
+    const archivList = document.createElement('div');
+    archivList.className = 'archiv-list';
+    archivList.id = 'archiv-list';
+    if (!archivOpen) archivList.style.display = 'none';
+    for (const info of archivData) {
+      archivList.appendChild(await buildChapterCardEl(info));
+    }
+    list.appendChild(archivList);
+  }
+}
+
+async function buildChapterCardEl(info) {
+  const data    = await loadChapterFile(info);
+  const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+  const total   = entries.length;
+  const learned = getLearnedCount(info.id, data.type, entries);
+  const lastTs  = getLastPracticed(info.id, data.type, entries);
+  const pct     = total > 0 ? Math.round((learned / total) * 100) : 0;
+  const weak    = getWeakCount(info.id, data.type, entries);
+  const sel     = selectedIds.has(info.id);
+  const badge   = data.type === 'verbs'
+    ? `<span class="badge badge-verbs">Verben</span>`
+    : `<span class="badge badge-vocab">Vokabeln</span>`;
+
+  const card = document.createElement('div');
+  card.className = `chapter-card${sel ? ' selected' : ''}`;
+  card.dataset.id = info.id;
+  card.onclick = () => toggleChapter(info.id);
+  card.innerHTML = `
+    <div class="chapter-card-checkbox">${sel ? '✓' : ''}</div>
+    <div class="chapter-card-body">
+      <div class="chapter-card-title-row">
+        <span class="chapter-card-title">${info.title}</span>
+        ${badge}
+      </div>
+      <div class="chapter-card-desc">${info.description}</div>
+      <div class="chapter-card-meta">
+        <span>${learned}/${total} gelernt</span>
+        <span>Zuletzt: ${formatDate(lastTs)}</span>
+      </div>
+      <div class="chapter-progress-wrap">
+        <div class="chapter-progress-bar">
+          <div class="chapter-progress-fill" style="width:${pct}%"></div>
+        </div>
+        ${weak > 0 ? `<div class="chapter-weak-hint">⚠️ ${weak} schwache Vokabeln</div>` : ''}
+      </div>
+    </div>`;
+  return card;
+}
+
+function toggleArchiv() {
+  archivOpen = !archivOpen;
+  try { localStorage.setItem('archiv_open', archivOpen ? 'true' : 'false'); } catch {}
+  const archivList = document.getElementById('archiv-list');
+  const icon = document.getElementById('archiv-toggle-icon');
+  if (archivList) archivList.style.display = archivOpen ? '' : 'none';
+  if (icon) icon.textContent = archivOpen ? '▲ verbergen' : '▼ anzeigen';
 }
 
 function toggleChapter(id) {
@@ -579,7 +629,7 @@ function openWeakModeScreen() {
 
 async function startKurztest() {
   sessionType = 'kurztest';
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (selectedIds.has(info.id) && !chapterData[info.id]) {
       await loadChapterFile(info);
     }
@@ -593,7 +643,7 @@ function goToModeScreen() {
   if (selectedIds.size === 0) return;
 
   const selectedTypes = new Set(
-    indexData
+    getAllChapterInfos()
       .filter(i => selectedIds.has(i.id))
       .map(i => (chapterData[i.id] ? chapterData[i.id].type : i.type))
   );
@@ -628,7 +678,7 @@ function goToModeScreen() {
     modes = hasVerbs ? verbModes : vocabModes;
   }
 
-  const totalEntries = indexData
+  const totalEntries = getAllChapterInfos()
     .filter(i => selectedIds.has(i.id) && chapterData[i.id])
     .reduce((sum, i) => {
       const d = chapterData[i.id];
@@ -681,7 +731,7 @@ function buildSessionCards(mode) {
   const due = [], fresh = [], future = [];
   allPool = [];
 
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
@@ -711,7 +761,7 @@ function buildSessionCards(mode) {
 
 function buildKurztestCards() {
   allPool = [];
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
@@ -754,7 +804,7 @@ function buildKurztestCards() {
 function buildWeakCards(mode) {
   allPool = [];
   const weak = [];
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
@@ -778,7 +828,7 @@ function buildWeakCards(mode) {
 async function startSession(mode) {
   currentMode = mode;
 
-  for (const info of indexData) {
+  for (const info of getAllChapterInfos()) {
     if (selectedIds.has(info.id) && !chapterData[info.id]) {
       await loadChapterFile(info);
     }
@@ -1599,7 +1649,7 @@ function renderStatsScreen() {
   statsWorstWords = worstWords;
 
   const pctCorrect = total.totalAnswered > 0 ? Math.round((total.totalCorrect / total.totalAnswered) * 100) : 0;
-  const chaptersAvailable = indexData.length;
+  const chaptersAvailable = getAllChapterInfos().length;
 
   const renderWordLine = (w, icon) => {
     const wordId = getEntryId(w.entry, w.type);
@@ -1706,6 +1756,7 @@ async function init() {
 
   selectedLanguage = localStorage.getItem('selected_language') || 'en';
   direction = `${getLangCode()}-DE`;
+  archivOpen = localStorage.getItem('archiv_open') === 'true';
 
   await loadIndexForLanguage(selectedLanguage);
   await renderChapterScreen();

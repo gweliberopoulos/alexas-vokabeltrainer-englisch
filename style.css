@@ -151,6 +151,28 @@ input { font-family: inherit; }
   gap: 10px;
 }
 
+/* Archiv toggle & list */
+.archiv-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-top: 4px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+.archiv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Chapter card */
 .chapter-card {
   background: var(--card-bg);
