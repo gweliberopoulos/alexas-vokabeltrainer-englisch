@@ -1,0 +1,28 @@
+{
+  "id": "unidad1b",
+  "type": "vocab",
+  "language": "es",
+  "title": "Unidad 1B",
+  "description": "Dorfleben, Kochen, landestypisches Essen",
+  "vocab": [
+    {"es":"el pueblo","de":"das Dorf","ex":"El pueblo está en las montañas."},
+    {"es":"la cumbre","de":"der Gipfel","ex":"Llegamos a la cumbre después de tres horas."},
+    {"es":"el arroz","de":"der Reis","ex":"Comemos arroz con verduras."},
+    {"es":"pintar algo / a alguien","de":"etw. / jdn malen","ex":"El artista pinta el paisaje del pueblo."},
+    {"es":"la hoja","de":"das Blatt","ex":"Envuelven el tamal en una hoja de maíz."},
+    {"es":"la masa","de":"der Teig","ex":"Preparamos la masa para las tortillas."},
+    {"es":"la publicación","de":"der Post; der Beitrag","ex":"Vi tu publicación en las redes sociales."},
+    {"es":"servir algo","de":"etw. servieren","ex":"¿Puedes servir la comida, por favor?"},
+    {"es":"la papa","de":"die Kartoffel (lat. am.)","ex":"En Perú, la papa es muy importante."},
+    {"es":"mostrar algo a alguien","de":"jdm etw. zeigen","ex":"Nos muestra cómo se prepara el tamal."},
+    {"es":"impresionante","de":"beeindruckend","ex":"La vista desde la cumbre es impresionante."},
+    {"es":"la sal","de":"das Salz","ex":"Añade un poco de sal a la masa."},
+    {"es":"el maíz","de":"der Mais","ex":"El maíz es la base de muchos platos."},
+    {"es":"difícil","de":"schwierig; schwer","ex":"Subir a la cumbre es difícil pero bonito."},
+    {"es":"la Navidad","de":"Weihnachten","ex":"En Navidad, mi familia prepara tamales."},
+    {"es":"el cilantro","de":"der Koriander","ex":"A mí me encanta el cilantro en la comida."},
+    {"es":"el lago","de":"der See","ex":"El pueblo está al lado de un lago."},
+    {"es":"encantarle a alguien","de":"jdm sehr gefallen; sehr mögen","ex":"Le encanta la comida tradicional."},
+    {"es":"el tamal","de":"traditionelles zentralamerikanisches Gericht aus Maisteig","ex":"El tamal es un plato tradicional centroamericano."}
+  ]
+}

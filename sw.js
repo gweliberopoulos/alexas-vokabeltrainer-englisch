@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vokabeltrainer-v7';
+const CACHE_NAME = 'vokabeltrainer-v8';
 const BASE = '/alexas-vokabeltrainer-englisch/';
 const ASSETS = [
   BASE,
@@ -26,6 +26,8 @@ const ASSETS = [
   BASE + 'data/en/archiv/unit3-stations.json',
   BASE + 'data/en/archiv/unit3-story-textsmart.json',
   BASE + 'data/es/index.json',
+  BASE + 'data/es/unidad1-primer-paso.json',
+  BASE + 'data/es/unidad1b.json',
   BASE + 'data/es/unidad3-primer-paso.json',
   BASE + 'data/es/unidad3-bloque-a.json',
   BASE + 'data/es/unidad3-bloque-b.json'

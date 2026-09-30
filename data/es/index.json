@@ -1,5 +1,21 @@
 [
   {
+    "id": "unidad1-primer-paso",
+    "type": "vocab",
+    "language": "es",
+    "title": "Unidad 1 – Primer Paso",
+    "description": "Reisevorbereitung, Südamerika, Sicherheit",
+    "file": "data/es/unidad1-primer-paso.json"
+  },
+  {
+    "id": "unidad1b",
+    "type": "vocab",
+    "language": "es",
+    "title": "Unidad 1B",
+    "description": "Dorfleben, Kochen, landestypisches Essen",
+    "file": "data/es/unidad1b.json"
+  },
+  {
     "id": "unidad3-primer-paso",
     "type": "vocab",
     "language": "es",
