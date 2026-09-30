@@ -1,0 +1,57 @@
+{
+  "id": "presente-irregular",
+  "type": "conjugation",
+  "language": "es",
+  "title": "Presente – Unregelmäßige & stammändernde Verben",
+  "description": "Verben im Präsens konjugieren (Stammänderung, Unregelmäßigkeiten)",
+  "verbs": [
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"yo","key":"yo","stem":"prefier","ending":"o","form":"prefiero"},
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"tú","key":"tu","stem":"prefier","ending":"es","form":"prefieres"},
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"él / ella / usted","key":"el","stem":"prefier","ending":"e","form":"prefiere"},
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"nosotros, -as","key":"nosotros","stem":"prefer","ending":"imos","form":"preferimos"},
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"vosotros, -as","key":"vosotros","stem":"prefer","ending":"ís","form":"preferís"},
+    {"inf":"preferir (-ie-)","de":"lieber mögen","group":"stammändernd e→ie","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"prefier","ending":"en","form":"prefieren"},
+
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"yo","key":"yo","stem":"pid","ending":"o","form":"pido"},
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"tú","key":"tu","stem":"pid","ending":"es","form":"pides"},
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"él / ella / usted","key":"el","stem":"pid","ending":"e","form":"pide"},
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"nosotros, -as","key":"nosotros","stem":"ped","ending":"imos","form":"pedimos"},
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"vosotros, -as","key":"vosotros","stem":"ped","ending":"ís","form":"pedís"},
+    {"inf":"pedir (-i-)","de":"bestellen; bitten um","group":"stammändernd e→i","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"pid","ending":"en","form":"piden"},
+
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"yo","key":"yo","stem":"sirv","ending":"o","form":"sirvo"},
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"tú","key":"tu","stem":"sirv","ending":"es","form":"sirves"},
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"él / ella / usted","key":"el","stem":"sirv","ending":"e","form":"sirve"},
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"nosotros, -as","key":"nosotros","stem":"serv","ending":"imos","form":"servimos"},
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"vosotros, -as","key":"vosotros","stem":"serv","ending":"ís","form":"servís"},
+    {"inf":"servir","de":"servieren","group":"stammändernd e→i","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"sirv","ending":"en","form":"sirven"},
+
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"yo","key":"yo","stem":"muestr","ending":"o","form":"muestro"},
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"tú","key":"tu","stem":"muestr","ending":"as","form":"muestras"},
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"él / ella / usted","key":"el","stem":"muestr","ending":"a","form":"muestra"},
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"nosotros, -as","key":"nosotros","stem":"mostr","ending":"amos","form":"mostramos"},
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"vosotros, -as","key":"vosotros","stem":"mostr","ending":"áis","form":"mostráis"},
+    {"inf":"mostrar","de":"zeigen","group":"stammändernd o→ue","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"muestr","ending":"an","form":"muestran"},
+
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"yo","key":"yo","stem":"teng","ending":"o","form":"tengo"},
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"tú","key":"tu","stem":"tien","ending":"es","form":"tienes"},
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"él / ella / usted","key":"el","stem":"tien","ending":"e","form":"tiene"},
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"nosotros, -as","key":"nosotros","stem":"ten","ending":"emos","form":"tenemos"},
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"vosotros, -as","key":"vosotros","stem":"ten","ending":"éis","form":"tenéis"},
+    {"inf":"tener (irr.)","de":"haben","group":"unregelmäßig","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"tien","ending":"en","form":"tienen"},
+
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"yo","key":"yo","stem":"d","ending":"oy","form":"doy"},
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"tú","key":"tu","stem":"d","ending":"as","form":"das"},
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"él / ella / usted","key":"el","stem":"d","ending":"a","form":"da"},
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"nosotros, -as","key":"nosotros","stem":"d","ending":"amos","form":"damos"},
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"vosotros, -as","key":"vosotros","stem":"d","ending":"ais","form":"dais"},
+    {"inf":"dar (irr.)","de":"geben","group":"unregelmäßig","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"d","ending":"an","form":"dan"},
+
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"yo","key":"yo","stem":"traig","ending":"o","form":"traigo"},
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"tú","key":"tu","stem":"tra","ending":"es","form":"traes"},
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"él / ella / usted","key":"el","stem":"tra","ending":"e","form":"trae"},
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"nosotros, -as","key":"nosotros","stem":"tra","ending":"emos","form":"traemos"},
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"vosotros, -as","key":"vosotros","stem":"tra","ending":"éis","form":"traéis"},
+    {"inf":"traer (irr.)","de":"bringen","group":"unregelmäßig","pronoun":"ellos / ellas / ustedes","key":"ellos","stem":"tra","ending":"en","form":"traen"}
+  ]
+}

@@ -38,5 +38,21 @@
     "title": "Unidad 3 – Bloque B",
     "description": "Restaurant, Essen bestellen, Bezahlen",
     "file": "data/es/unidad3-bloque-b.json"
+  },
+  {
+    "id": "presente-regular",
+    "type": "conjugation",
+    "language": "es",
+    "title": "Presente – Regelmäßige Verben",
+    "description": "Verben im Präsens konjugieren (-ar / -ir, regelmäßig)",
+    "file": "data/es/presente-regular.json"
+  },
+  {
+    "id": "presente-irregular",
+    "type": "conjugation",
+    "language": "es",
+    "title": "Presente – Unregelmäßige & stammändernde Verben",
+    "description": "Verben im Präsens konjugieren (Stammänderung, Unregelmäßigkeiten)",
+    "file": "data/es/presente-irregular.json"
   }
 ]

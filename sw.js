@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vokabeltrainer-v8';
+const CACHE_NAME = 'vokabeltrainer-v9';
 const BASE = '/alexas-vokabeltrainer-englisch/';
 const ASSETS = [
   BASE,
@@ -30,7 +30,9 @@ const ASSETS = [
   BASE + 'data/es/unidad1b.json',
   BASE + 'data/es/unidad3-primer-paso.json',
   BASE + 'data/es/unidad3-bloque-a.json',
-  BASE + 'data/es/unidad3-bloque-b.json'
+  BASE + 'data/es/unidad3-bloque-b.json',
+  BASE + 'data/es/presente-regular.json',
+  BASE + 'data/es/presente-irregular.json'
 ];
 
 self.addEventListener('install', e => {

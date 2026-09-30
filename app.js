@@ -50,7 +50,12 @@ function getWordField() {
 
 function getEntryId(entry, type) {
   if (type === 'verbs') return entry.base;
+  if (type === 'conjugation') return `${entry.inf}_${entry.key}`;
   return entry[selectedLanguage]; // entry.en or entry.es
+}
+
+function getChapterEntries(data) {
+  return data.type === 'vocab' ? data.vocab : data.verbs; // 'verbs' and 'conjugation' both use the 'verbs' array
 }
 
 // ===== LOCALSTORAGE MIGRATION =====
@@ -84,6 +89,7 @@ function migrateLocalStorage() {
 
 function srsKey(chapterId, type, id) {
   if (type === 'verbs') return `srs_${selectedLanguage}_${chapterId}_verbs_${id}`;
+  if (type === 'conjugation') return `srs_${selectedLanguage}_${chapterId}_conjug_${id}`;
   return `srs_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
@@ -149,6 +155,7 @@ function formatDate(ts) {
 
 function weakKey(chapterId, type, id) {
   if (type === 'verbs') return `weak_${selectedLanguage}_${chapterId}_verbs_${id}`;
+  if (type === 'conjugation') return `weak_${selectedLanguage}_${chapterId}_conjug_${id}`;
   return `weak_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
@@ -184,7 +191,7 @@ function getTotalWeakCount() {
   for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id) || !chapterData[info.id]) continue;
     const data = chapterData[info.id];
-    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    const entries = getChapterEntries(data);
     for (const entry of entries) {
       const id = getEntryId(entry, data.type);
       if (getWeak(weakKey(info.id, data.type, id)) >= 1) count++;
@@ -294,7 +301,7 @@ function getAllWordStats() {
         const wordId = rest.slice(pfx.length);
         const d = chapterData[info.id];
         if (!d) break;
-        const entries = d.type === 'verbs' ? d.verbs : d.vocab;
+        const entries = getChapterEntries(d);
         const entry = entries.find(e => getEntryId(e, d.type) === wordId);
         if (entry) {
           let data;
@@ -495,7 +502,7 @@ async function renderChapterScreen() {
 
 async function buildChapterCardEl(info) {
   const data    = await loadChapterFile(info);
-  const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+  const entries = getChapterEntries(data);
   const total   = entries.length;
   const learned = getLearnedCount(info.id, data.type, entries);
   const lastTs  = getLastPracticed(info.id, data.type, entries);
@@ -504,7 +511,9 @@ async function buildChapterCardEl(info) {
   const sel     = selectedIds.has(info.id);
   const badge   = data.type === 'verbs'
     ? `<span class="badge badge-verbs">Verben</span>`
-    : `<span class="badge badge-vocab">Vokabeln</span>`;
+    : data.type === 'conjugation'
+      ? `<span class="badge badge-conjug">Konjugation</span>`
+      : `<span class="badge badge-vocab">Vokabeln</span>`;
 
   const card = document.createElement('div');
   card.className = `chapter-card${sel ? ' selected' : ''}`;
@@ -634,7 +643,19 @@ async function startKurztest() {
       await loadChapterFile(info);
     }
   }
-  await startSession('mc');
+  const selectedTypes = new Set(
+    getAllChapterInfos()
+      .filter(i => selectedIds.has(i.id) && chapterData[i.id])
+      .map(i => chapterData[i.id].type)
+  );
+  const onlyConjug = selectedTypes.size === 1 && selectedTypes.has('conjugation');
+  await startSession(onlyConjug ? 'mc-conjug' : 'mc');
+}
+
+// Which chapter types a given practice mode can render cards for.
+function modeSupportsType(mode, type) {
+  if (mode === 'mc-conjug' || mode === 'ending') return type === 'conjugation';
+  return type !== 'conjugation';
 }
 
 // ===== MODE SELECTION SCREEN =====
@@ -647,9 +668,10 @@ function goToModeScreen() {
       .filter(i => selectedIds.has(i.id))
       .map(i => (chapterData[i.id] ? chapterData[i.id].type : i.type))
   );
-  const hasVocab = selectedTypes.has('vocab');
-  const hasVerbs = selectedTypes.has('verbs');
-  const mixed    = hasVocab && hasVerbs;
+  const hasVocab  = selectedTypes.has('vocab');
+  const hasVerbs  = selectedTypes.has('verbs');
+  const hasConjug = selectedTypes.has('conjugation');
+  const mixed     = selectedTypes.size > 1;
 
   const vocabModes = [
     { id: 'flashcard',    icon: '🃏', name: 'Karteikarten',   desc: 'Umdrehen & bewerten' },
@@ -665,31 +687,38 @@ function goToModeScreen() {
     { id: 'chain',        icon: '⛓️', name: 'Kettentraining',  desc: 'Alle 3 Formen eintippen' },
     { id: 'pronunciation',icon: '🔊', name: 'Aussprache',      desc: 'Verb heraushören' },
   ];
+  const conjugModes = [
+    { id: 'mc-conjug',    icon: '✅', name: 'Multiple Choice', desc: 'Richtige Form auswählen' },
+    { id: 'ending',       icon: '🔤', name: 'Endung eingeben', desc: 'Nur die richtige Endung tippen' },
+  ];
+
+  const typeModeLists = [];
+  if (hasVocab)  typeModeLists.push(vocabModes);
+  if (hasVerbs)  typeModeLists.push(verbModes);
+  if (hasConjug) typeModeLists.push(conjugModes);
 
   let modes;
-  if (mixed) {
+  if (typeModeLists.length > 1) {
     const seen = new Set();
-    modes = [...vocabModes, ...verbModes].filter(m => {
+    modes = typeModeLists.flat().filter(m => {
       if (seen.has(m.id)) return false;
       seen.add(m.id);
       return true;
     });
   } else {
-    modes = hasVerbs ? verbModes : vocabModes;
+    modes = typeModeLists[0];
   }
 
   const totalEntries = getAllChapterInfos()
     .filter(i => selectedIds.has(i.id) && chapterData[i.id])
-    .reduce((sum, i) => {
-      const d = chapterData[i.id];
-      return sum + (d.type === 'verbs' ? d.verbs.length : d.vocab.length);
-    }, 0);
+    .reduce((sum, i) => sum + getChapterEntries(chapterData[i.id]).length, 0);
 
   const langCode = getLangCode();
   const flag     = getLangFlag();
   const dirLabel = isForwardDirection()
     ? `${flag} ${langCode} → 🇩🇪 DE`
     : `🇩🇪 DE → ${flag} ${langCode}`;
+  const onlyConjug = hasConjug && !hasVocab && !hasVerbs;
 
   document.getElementById('app').innerHTML = `
     <div class="screen active" id="screen-modes">
@@ -700,7 +729,7 @@ function goToModeScreen() {
       <div class="mode-screen-body">
         <div class="mode-screen-info">
           <strong>${selectedIds.size} Kapitel</strong> · <strong>${totalEntries} Einträge</strong><br>
-          Richtung: <strong>${dirLabel}</strong>
+          ${onlyConjug ? 'Richtung: <strong>Infinitiv → konjugierte Form</strong>' : `Richtung: <strong>${dirLabel}</strong>`}
           ${mixed ? ' · <em>Gemischte Auswahl</em>' : ''}
         </div>
         <div class="mode-grid">
@@ -735,7 +764,8 @@ function buildSessionCards(mode) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
-    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    if (!modeSupportsType(mode, data.type)) continue;
+    const entries = getChapterEntries(data);
 
     for (const entry of entries) {
       const id  = getEntryId(entry, data.type);
@@ -759,13 +789,14 @@ function buildSessionCards(mode) {
   return [...shuffle(due), ...shuffle(fresh), ...shuffle(future)];
 }
 
-function buildKurztestCards() {
+function buildKurztestCards(mode) {
   allPool = [];
   for (const info of getAllChapterInfos()) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
-    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    if (!modeSupportsType(mode, data.type)) continue;
+    const entries = getChapterEntries(data);
     for (const entry of entries) {
       const id   = getEntryId(entry, data.type);
       const key  = srsKey(info.id, data.type, id);
@@ -808,7 +839,8 @@ function buildWeakCards(mode) {
     if (!selectedIds.has(info.id)) continue;
     const data = chapterData[info.id];
     if (!data) continue;
-    const entries = data.type === 'verbs' ? data.verbs : data.vocab;
+    if (!modeSupportsType(mode, data.type)) continue;
+    const entries = getChapterEntries(data);
     for (const entry of entries) {
       const id  = getEntryId(entry, data.type);
       const key = srsKey(info.id, data.type, id);
@@ -835,7 +867,7 @@ async function startSession(mode) {
   }
 
   if (sessionType === 'kurztest') {
-    sessionCards = buildKurztestCards();
+    sessionCards = buildKurztestCards(mode);
   } else if (sessionType === 'schwach') {
     sessionCards = buildWeakCards(mode);
   } else {
@@ -901,6 +933,7 @@ function renderCurrentCard() {
   let mode = currentMode;
   if (mode === 'typing' && card.type === 'verbs') mode = 'chain';
   if (mode === 'chain'  && card.type === 'vocab') mode = 'typing';
+  if (mode === 'typing' && card.type === 'conjugation') mode = 'ending';
 
   switch (mode) {
     case 'flashcard':     renderFlashcard(card);     break;
@@ -909,6 +942,8 @@ function renderCurrentCard() {
     case 'pronunciation': renderPronunciation(card); break;
     case 'gap':           renderGap(card);           break;
     case 'chain':         renderChain(card);         break;
+    case 'mc-conjug':     renderConjugMC(card);      break;
+    case 'ending':        renderConjugEnding(card);  break;
     default:              renderFlashcard(card);
   }
 }
@@ -1502,6 +1537,109 @@ function submitChain() {
   }
 }
 
+// ===== SPANISH CONJUGATION MODES (Präsens) =====
+// Direction is fixed (infinitive/German → Spanish form); the global EN-DE/ES-DE
+// direction toggle does not apply here, since conjugation isn't a translation.
+
+function renderConjugMC(card) {
+  const e = card.entry;
+  const correctAns = e.form;
+
+  // Distractors come from the same verb's other persons — that's the actual
+  // confusion point in Präsens (which ending goes with which pronoun), not
+  // "which verb is this". Every verb in the pool has all 6 forms loaded
+  // together (whole chapters, never single persons), so 5 alternatives are
+  // always available for 3 distractors.
+  const distractors = shuffle(
+    allPool
+      .filter(p => p.type === 'conjugation' && p.entry.inf === e.inf && p.entry.key !== e.key)
+      .map(p => p.entry.form)
+  ).slice(0, 3);
+
+  const options = shuffle([correctAns, ...distractors]);
+  cardState.mcOptions  = options;
+  cardState.mcCorrect  = correctAns;
+  cardState.mcSelected = null;
+
+  document.getElementById('session-content').innerHTML = `
+    <div class="mc-question">
+      <div class="mc-question-sub">Presente · ${e.pronoun}</div>
+      <div class="mc-question-word">${e.inf}</div>
+      <div class="mc-question-phonetic">${e.de}</div>
+    </div>
+    <div class="mc-options">
+      ${options.map((opt, i) =>
+        `<button class="mc-option" id="mc-opt-${i}" onclick="selectMCOption(${i})">${opt}</button>`
+      ).join('')}
+    </div>
+    <div id="mc-feedback" class="hidden"></div>`;
+}
+
+function renderConjugEnding(card) {
+  const e = card.entry;
+  document.getElementById('session-content').innerHTML = `
+    <div class="typing-question">
+      <div class="typing-question-sub">Presente · ${e.pronoun}</div>
+      <div class="typing-word">${e.inf}</div>
+      <div class="typing-phonetic">${e.de}</div>
+      <div class="chain-forms-row" style="margin-top:14px">
+        <span class="chain-known" style="font-size:22px">${e.stem}</span><span class="gap-blank" style="font-size:22px">___</span>
+      </div>
+    </div>
+    <div class="typing-input-row">
+      <input type="text" class="typing-input" id="ending-input"
+             placeholder="Endung…" autocorrect="off" autocapitalize="none" spellcheck="false"
+             onkeydown="if(event.key==='Enter')submitEnding()">
+      <button class="btn-submit" id="ending-submit" onclick="submitEnding()">→</button>
+    </div>
+    <div id="ending-feedback" class="hidden"></div>
+    <div id="ending-continue" class="hidden"></div>`;
+
+  document.getElementById('ending-input').focus();
+}
+
+function submitEnding() {
+  const input = document.getElementById('ending-input');
+  const fb    = document.getElementById('ending-feedback');
+  const cont  = document.getElementById('ending-continue');
+  if (!input || input.disabled) return;
+
+  const card   = sessionCards[sessionIdx];
+  const e      = card.entry;
+  const result = checkAnswer(input.value, e.ending);
+
+  input.disabled = true;
+  const submitBtn = document.getElementById('ending-submit');
+  if (submitBtn) submitBtn.disabled = true;
+
+  let rating;
+  if (result.ok) {
+    input.classList.add('correct');
+    fb.className = 'feedback-box ok mt-8';
+    fb.textContent = result.type === 'exact' ? '✓ Richtig!' : `✓ Fast! Richtig: ${e.ending}`;
+    rating = result.type === 'exact' ? 3 : 2;
+    sessionCorrect++;
+  } else {
+    input.classList.add('wrong');
+    fb.className = 'feedback-box fail mt-8';
+    fb.textContent = `✗ Richtig: ${e.stem}${e.ending}  (Endung: ${e.ending})`;
+    rating = 0;
+    sessionWrong++;
+  }
+
+  applyWeakUpdate(card, result.ok);
+  recordAnswer(card, result.ok);
+  updateSRS(card.key, rating);
+  if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
+    const pos = Math.min(sessionIdx + 4, sessionCards.length);
+    sessionCards.splice(pos, 0, { ...card, requeued: true });
+    sessionTotal = sessionCards.length;
+  }
+
+  cont.innerHTML = `<button class="btn-continue mt-12" onclick="sessionIdx++;renderCurrentCard()">Weiter →</button>`;
+  cont.className = '';
+}
+
 // ===== RESULTS SCREEN =====
 
 function renderResults() {
@@ -1652,7 +1790,7 @@ function renderStatsScreen() {
   const chaptersAvailable = getAllChapterInfos().length;
 
   const renderWordLine = (w, icon) => {
-    const wordId = getEntryId(w.entry, w.type);
+    const wordId = w.type === 'conjugation' ? `${w.entry.form} (${w.entry.pronoun})` : getEntryId(w.entry, w.type);
     const de  = w.entry.de;
     const tot = w.correct + w.wrong;
     return `<div class="stats-word-row">${icon} <span class="stats-word-en">${wordId}</span><span class="stats-word-arrow"> → </span><span class="stats-word-de">${de}</span><span class="stats-word-score">(${w.correct}/${tot} richtig)</span></div>`;
