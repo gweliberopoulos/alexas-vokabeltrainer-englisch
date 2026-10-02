@@ -1,0 +1,33 @@
+{
+  "id": "rs-0-ueberblick",
+  "type": "exercise",
+  "language": "en",
+  "title": "Reported Speech 0 – Überblick: Was ändert sich?",
+  "description": "Verben, Pronomen sowie Zeit & Ort in der direkten Rede markieren",
+  "items": [
+    {"id":"k01","kind":"mark","rule":"mixed","text":"Terry told Sally, “I flew to London yesterday.”",
+     "marks":{"p":["I"],"v":["flew"],"t":["yesterday"]},
+     "hint":"Terry told Sally that he had flown to London the day before."},
+    {"id":"k02","kind":"mark","rule":"mixed","text":"Ben promised, “I will finish my homework tomorrow.”",
+     "marks":{"p":["I","my"],"v":["will","finish"],"t":["tomorrow"]},
+     "hint":"Ben promised that he would finish his homework the next day."},
+    {"id":"k03","kind":"mark","rule":"mixed","text":"Lisa said, “We were in Paris last year.”",
+     "marks":{"p":["We"],"v":["were"],"t":["last","year"]},
+     "hint":"Lisa said that they had been in Paris the year before."},
+    {"id":"k04","kind":"mark","rule":"mixed","text":"“I have been waiting for you for two hours,” she complained.",
+     "marks":{"p":["I","you"],"v":["have","been","waiting"]},
+     "hint":"She complained that she had been waiting for him for two hours. – Zeitdauern mit „for“ bleiben unverändert."},
+    {"id":"k05","kind":"mark","rule":"mixed","text":"“You are doing a great job,” Greta said to me.",
+     "marks":{"p":["You"],"v":["are","doing"]},
+     "hint":"Greta told me that I was doing a great job. – „me“ steht im Erzählsatz außerhalb der Anführungszeichen und ändert sich nicht."},
+    {"id":"k06","kind":"mark","rule":"mixed","text":"Mum said to me, “You can meet me here today.”",
+     "marks":{"p":["You","me"],"v":["can","meet"],"t":["here","today"]},
+     "hint":"Mum told me that I could meet her there that day. – Das „me“ im Erzählsatz (said to me) bleibt, das „me“ in der wörtlichen Rede wird zu her."},
+    {"id":"k07","kind":"mark","rule":"mixed","text":"Max said, “My sister is working in this office now.”",
+     "marks":{"p":["My"],"v":["is","working"],"t":["this","now"]},
+     "hint":"Max said that his sister was working in that office then. – this → that gehört zu „Zeit & Ort“."},
+    {"id":"k08","kind":"mark","rule":"mixed","text":"The boys said, “We saw them two days ago.”",
+     "marks":{"p":["We"],"v":["saw"],"t":["two","days","ago"]},
+     "hint":"The boys said that they had seen them two days before. – „them“ meint andere Personen und bleibt unverändert."}
+  ]
+}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vokabeltrainer-v9';
+const CACHE_NAME = 'vokabeltrainer-v11';
 const BASE = '/alexas-vokabeltrainer-englisch/';
 const ASSETS = [
   BASE,
@@ -12,6 +12,13 @@ const ASSETS = [
   BASE + 'data/en/klasse8/8-unit1-checkin.json',
   BASE + 'data/en/klasse8/8-unit1-station1.json',
   BASE + 'data/en/irregular-verbs.json',
+  BASE + 'data/en/grammatik/index.json',
+  BASE + 'data/en/grammatik/rs-0-ueberblick.json',
+  BASE + 'data/en/grammatik/rs-1-zeit-ort.json',
+  BASE + 'data/en/grammatik/rs-2-pronomen.json',
+  BASE + 'data/en/grammatik/rs-3-zeiten.json',
+  BASE + 'data/en/grammatik/rs-4-verben-befehle-fragen.json',
+  BASE + 'data/en/grammatik/rs-5-alles-zusammen.json',
   BASE + 'data/en/archiv/index.json',
   BASE + 'data/en/archiv/unit1-across-cultures.json',
   BASE + 'data/en/archiv/unit1-weekend-workshop.json',

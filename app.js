@@ -6,7 +6,8 @@ const SRS_INTERVALS = [0, 1440, 4320, 10080]; // minutes per level
 // ===== STATE =====
 let indexData        = [];
 let archivData       = []; // Klasse-7-Archiv (nur Englisch)
-let archivOpen       = false;
+let grammatikData    = []; // Grammatik-Übungen (nur Englisch)
+const sectionOpen    = { grammatik: true, archiv: false }; // einklappbare Bereiche der Kapitelliste
 let chapterData      = {}; // { id: parsed JSON }
 let selectedIds      = new Set();
 let direction        = 'EN-DE';
@@ -51,11 +52,14 @@ function getWordField() {
 function getEntryId(entry, type) {
   if (type === 'verbs') return entry.base;
   if (type === 'conjugation') return `${entry.inf}_${entry.key}`;
+  if (type === 'exercise') return entry.id;
   return entry[selectedLanguage]; // entry.en or entry.es
 }
 
 function getChapterEntries(data) {
-  return data.type === 'vocab' ? data.vocab : data.verbs; // 'verbs' and 'conjugation' both use the 'verbs' array
+  if (data.type === 'vocab') return data.vocab;
+  if (data.type === 'exercise') return data.items;
+  return data.verbs; // 'verbs' and 'conjugation'
 }
 
 // ===== LOCALSTORAGE MIGRATION =====
@@ -90,6 +94,7 @@ function migrateLocalStorage() {
 function srsKey(chapterId, type, id) {
   if (type === 'verbs') return `srs_${selectedLanguage}_${chapterId}_verbs_${id}`;
   if (type === 'conjugation') return `srs_${selectedLanguage}_${chapterId}_conjug_${id}`;
+  if (type === 'exercise') return `srs_${selectedLanguage}_${chapterId}_ex_${id}`;
   return `srs_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
@@ -156,6 +161,7 @@ function formatDate(ts) {
 function weakKey(chapterId, type, id) {
   if (type === 'verbs') return `weak_${selectedLanguage}_${chapterId}_verbs_${id}`;
   if (type === 'conjugation') return `weak_${selectedLanguage}_${chapterId}_conjug_${id}`;
+  if (type === 'exercise') return `weak_${selectedLanguage}_${chapterId}_ex_${id}`;
   return `weak_${selectedLanguage}_${chapterId}_${direction}_${id}`;
 }
 
@@ -391,22 +397,24 @@ async function loadIndexForLanguage(lang) {
   } catch {
     indexData = [];
   }
-  await loadArchivIndex(lang);
+  archivData    = await loadOptionalIndex(lang, 'data/en/archiv/index.json');
+  grammatikData = await loadOptionalIndex(lang, 'data/en/grammatik/index.json');
 }
 
-async function loadArchivIndex(lang) {
-  if (lang !== 'en') { archivData = []; return; }
+// Extra chapter lists that only exist for English.
+async function loadOptionalIndex(lang, url) {
+  if (lang !== 'en') return [];
   try {
-    const resp = await fetch('data/en/archiv/index.json');
+    const resp = await fetch(url);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    archivData = await resp.json();
+    return await resp.json();
   } catch {
-    archivData = [];
+    return [];
   }
 }
 
 function getAllChapterInfos() {
-  return [...indexData, ...archivData];
+  return [...indexData, ...grammatikData, ...archivData];
 }
 
 // ===== LANGUAGE SWITCH =====
@@ -469,7 +477,7 @@ async function renderChapterScreen() {
 
   const list = document.getElementById('chapter-list');
 
-  if (indexData.length === 0 && archivData.length === 0) {
+  if (getAllChapterInfos().length === 0) {
     list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)">Noch keine ${getLangName()}-Kapitel vorhanden.</div>`;
     return;
   }
@@ -480,23 +488,30 @@ async function renderChapterScreen() {
     list.appendChild(await buildChapterCardEl(info));
   }
 
-  if (archivData.length > 0) {
+  const sections = [
+    { key: 'grammatik', title: '📘 Grammatik',         infos: grammatikData },
+    { key: 'archiv',    title: '📦 Archiv – Klasse 7', infos: archivData },
+  ];
+  for (const sec of sections) {
+    if (sec.infos.length === 0) continue;
+    const open = sectionOpen[sec.key];
+
     const toggleRow = document.createElement('div');
-    toggleRow.className = 'archiv-toggle-row';
-    toggleRow.onclick = toggleArchiv;
+    toggleRow.className = 'section-toggle-row';
+    toggleRow.onclick = () => toggleSection(sec.key);
     toggleRow.innerHTML = `
-      <span>📦 Archiv – Klasse 7</span>
-      <span id="archiv-toggle-icon">${archivOpen ? '▲ verbergen' : '▼ anzeigen'}</span>`;
+      <span>${sec.title}</span>
+      <span id="section-icon-${sec.key}">${open ? '▲ verbergen' : '▼ anzeigen'}</span>`;
     list.appendChild(toggleRow);
 
-    const archivList = document.createElement('div');
-    archivList.className = 'archiv-list';
-    archivList.id = 'archiv-list';
-    if (!archivOpen) archivList.style.display = 'none';
-    for (const info of archivData) {
-      archivList.appendChild(await buildChapterCardEl(info));
+    const secList = document.createElement('div');
+    secList.className = 'section-list';
+    secList.id = `section-list-${sec.key}`;
+    if (!open) secList.style.display = 'none';
+    for (const info of sec.infos) {
+      secList.appendChild(await buildChapterCardEl(info));
     }
-    list.appendChild(archivList);
+    list.appendChild(secList);
   }
 }
 
@@ -509,11 +524,12 @@ async function buildChapterCardEl(info) {
   const pct     = total > 0 ? Math.round((learned / total) * 100) : 0;
   const weak    = getWeakCount(info.id, data.type, entries);
   const sel     = selectedIds.has(info.id);
-  const badge   = data.type === 'verbs'
-    ? `<span class="badge badge-verbs">Verben</span>`
-    : data.type === 'conjugation'
-      ? `<span class="badge badge-conjug">Konjugation</span>`
-      : `<span class="badge badge-vocab">Vokabeln</span>`;
+  const badge   = {
+    verbs:       `<span class="badge badge-verbs">Verben</span>`,
+    conjugation: `<span class="badge badge-conjug">Konjugation</span>`,
+    exercise:    `<span class="badge badge-exercise">Grammatik</span>`,
+  }[data.type] || `<span class="badge badge-vocab">Vokabeln</span>`;
+  const weakNoun = data.type === 'exercise' ? 'Aufgaben' : 'Vokabeln';
 
   const card = document.createElement('div');
   card.className = `chapter-card${sel ? ' selected' : ''}`;
@@ -535,19 +551,19 @@ async function buildChapterCardEl(info) {
         <div class="chapter-progress-bar">
           <div class="chapter-progress-fill" style="width:${pct}%"></div>
         </div>
-        ${weak > 0 ? `<div class="chapter-weak-hint">⚠️ ${weak} schwache Vokabeln</div>` : ''}
+        ${weak > 0 ? `<div class="chapter-weak-hint">⚠️ ${weak} schwache ${weakNoun}</div>` : ''}
       </div>
     </div>`;
   return card;
 }
 
-function toggleArchiv() {
-  archivOpen = !archivOpen;
-  try { localStorage.setItem('archiv_open', archivOpen ? 'true' : 'false'); } catch {}
-  const archivList = document.getElementById('archiv-list');
-  const icon = document.getElementById('archiv-toggle-icon');
-  if (archivList) archivList.style.display = archivOpen ? '' : 'none';
-  if (icon) icon.textContent = archivOpen ? '▲ verbergen' : '▼ anzeigen';
+function toggleSection(key) {
+  sectionOpen[key] = !sectionOpen[key];
+  try { localStorage.setItem(`${key}_open`, sectionOpen[key] ? 'true' : 'false'); } catch {}
+  const secList = document.getElementById(`section-list-${key}`);
+  const icon = document.getElementById(`section-icon-${key}`);
+  if (secList) secList.style.display = sectionOpen[key] ? '' : 'none';
+  if (icon) icon.textContent = sectionOpen[key] ? '▲ verbergen' : '▼ anzeigen';
 }
 
 function toggleChapter(id) {
@@ -648,14 +664,24 @@ async function startKurztest() {
       .filter(i => selectedIds.has(i.id) && chapterData[i.id])
       .map(i => chapterData[i.id].type)
   );
-  const onlyConjug = selectedTypes.size === 1 && selectedTypes.has('conjugation');
-  await startSession(onlyConjug ? 'mc-conjug' : 'mc');
+  const onlyType = selectedTypes.size === 1 ? [...selectedTypes][0] : null;
+  const kurztestMode = { conjugation: 'mc-conjug', exercise: 'exercise-auto' }[onlyType] || 'mc';
+  await startSession(kurztestMode);
 }
 
 // Which chapter types a given practice mode can render cards for.
 function modeSupportsType(mode, type) {
   if (mode === 'mc-conjug' || mode === 'ending') return type === 'conjugation';
-  return type !== 'conjugation';
+  if (mode.startsWith('exercise')) return type === 'exercise';
+  return type !== 'conjugation' && type !== 'exercise';
+}
+
+// Grammar exercises can be limited to auto-checked kinds or to writing tasks.
+function modeSupportsEntry(mode, type, entry) {
+  if (type !== 'exercise') return true;
+  if (mode === 'exercise-auto')  return entry.kind !== 'rewrite';
+  if (mode === 'exercise-write') return entry.kind === 'rewrite';
+  return true;
 }
 
 // ===== MODE SELECTION SCREEN =====
@@ -671,6 +697,7 @@ function goToModeScreen() {
   const hasVocab  = selectedTypes.has('vocab');
   const hasVerbs  = selectedTypes.has('verbs');
   const hasConjug = selectedTypes.has('conjugation');
+  const hasExercise = selectedTypes.has('exercise');
   const mixed     = selectedTypes.size > 1;
 
   const vocabModes = [
@@ -692,10 +719,17 @@ function goToModeScreen() {
     { id: 'ending',       icon: '🔤', name: 'Endung eingeben', desc: 'Nur die richtige Endung tippen' },
   ];
 
+  const exerciseModes = [
+    { id: 'exercise',       icon: '🎲', name: 'Gemischt üben',     desc: 'Alle Aufgabenformen im Wechsel' },
+    { id: 'exercise-auto',  icon: '✅', name: 'Auswählen & Ordnen', desc: 'Auswahl, Lücken, Ordnen, Zuordnen, Markieren' },
+    { id: 'exercise-write', icon: '✍️', name: 'Sätze schreiben',    desc: 'Umformen & Korrigieren, automatisch geprüft' },
+  ];
+
   const typeModeLists = [];
-  if (hasVocab)  typeModeLists.push(vocabModes);
-  if (hasVerbs)  typeModeLists.push(verbModes);
-  if (hasConjug) typeModeLists.push(conjugModes);
+  if (hasVocab)    typeModeLists.push(vocabModes);
+  if (hasVerbs)    typeModeLists.push(verbModes);
+  if (hasConjug)   typeModeLists.push(conjugModes);
+  if (hasExercise) typeModeLists.push(exerciseModes);
 
   let modes;
   if (typeModeLists.length > 1) {
@@ -718,7 +752,13 @@ function goToModeScreen() {
   const dirLabel = isForwardDirection()
     ? `${flag} ${langCode} → 🇩🇪 DE`
     : `🇩🇪 DE → ${flag} ${langCode}`;
-  const onlyConjug = hasConjug && !hasVocab && !hasVerbs;
+  let directionInfo = `Richtung: <strong>${dirLabel}</strong>`;
+  if (!hasVocab && !hasVerbs) {
+    // Konjugation und Grammatik kennen keine Übersetzungsrichtung.
+    directionInfo = hasConjug && hasExercise ? '<strong>Konjugation & Grammatik</strong>'
+      : hasExercise ? '<strong>Grammatik-Übungen</strong>'
+      : 'Richtung: <strong>Infinitiv → konjugierte Form</strong>';
+  }
 
   document.getElementById('app').innerHTML = `
     <div class="screen active" id="screen-modes">
@@ -729,7 +769,7 @@ function goToModeScreen() {
       <div class="mode-screen-body">
         <div class="mode-screen-info">
           <strong>${selectedIds.size} Kapitel</strong> · <strong>${totalEntries} Einträge</strong><br>
-          ${onlyConjug ? 'Richtung: <strong>Infinitiv → konjugierte Form</strong>' : `Richtung: <strong>${dirLabel}</strong>`}
+          ${directionInfo}
           ${mixed ? ' · <em>Gemischte Auswahl</em>' : ''}
         </div>
         <div class="mode-grid">
@@ -765,7 +805,7 @@ function buildSessionCards(mode) {
     const data = chapterData[info.id];
     if (!data) continue;
     if (!modeSupportsType(mode, data.type)) continue;
-    const entries = getChapterEntries(data);
+    const entries = getChapterEntries(data).filter(e => modeSupportsEntry(mode, data.type, e));
 
     for (const entry of entries) {
       const id  = getEntryId(entry, data.type);
@@ -796,7 +836,7 @@ function buildKurztestCards(mode) {
     const data = chapterData[info.id];
     if (!data) continue;
     if (!modeSupportsType(mode, data.type)) continue;
-    const entries = getChapterEntries(data);
+    const entries = getChapterEntries(data).filter(e => modeSupportsEntry(mode, data.type, e));
     for (const entry of entries) {
       const id   = getEntryId(entry, data.type);
       const key  = srsKey(info.id, data.type, id);
@@ -840,7 +880,7 @@ function buildWeakCards(mode) {
     const data = chapterData[info.id];
     if (!data) continue;
     if (!modeSupportsType(mode, data.type)) continue;
-    const entries = getChapterEntries(data);
+    const entries = getChapterEntries(data).filter(e => modeSupportsEntry(mode, data.type, e));
     for (const entry of entries) {
       const id  = getEntryId(entry, data.type);
       const key = srsKey(info.id, data.type, id);
@@ -934,6 +974,9 @@ function renderCurrentCard() {
   if (mode === 'typing' && card.type === 'verbs') mode = 'chain';
   if (mode === 'chain'  && card.type === 'vocab') mode = 'typing';
   if (mode === 'typing' && card.type === 'conjugation') mode = 'ending';
+  if (mode === 'typing' && card.type === 'exercise') mode = 'exercise';
+
+  if (mode.startsWith('exercise')) { renderExercise(card); return; }
 
   switch (mode) {
     case 'flashcard':     renderFlashcard(card);     break;
@@ -1640,6 +1683,574 @@ function submitEnding() {
   cont.className = '';
 }
 
+// ===== GRAMMAR EXERCISES (chapter type 'exercise') =====
+// Item kinds: choice | gap | order | match | rewrite | mark.
+// Flow for every kind: answer -> feedback + rule hint -> "Weiter".
+// Grammar is not a translation, so the global direction toggle does not apply.
+
+const RULE_LABELS = {
+  time: 'Zeit- & Ortsangaben', pronoun: 'Pronomen', tense: 'Zeitenverschiebung',
+  verb: 'Reporting verbs', 'say-tell': 'say / tell', command: 'Befehle',
+  question: 'Fragen', mixed: 'Gemischt',
+};
+
+const RULE_HINTS = {
+  time: 'Zeit- und Ortsangaben ändern sich: today → that day · tomorrow → the next / following day · yesterday → the day before · next week → the following week · last week → the week before · … ago → … before · now → then · here → there · this / these → that / those.',
+  pronoun: 'Pronomen passen sich an, wer berichtet: I → he / she · we → they · you → I / he / she / they (je nach Person) · my → his / her · our → their · mine → his / hers.',
+  tense: 'Zeitenverschiebung: present → past · will → would · can → could · must → had to · am / is / are going to → was / were going to · present perfect → past perfect · simple past → past perfect · past perfect bleibt unverändert.',
+  verb: 'Reporting verbs sagen genauer, wie etwas gesagt wurde (promise, admit, deny, complain …). Sie stehen ebenfalls im Past. inform und remind brauchen eine Person: informed me, reminded him.',
+  'say-tell': 'say + that-Satz (ohne Person): She said that … · tell + Person + that-Satz: She told me that …',
+  command: 'Aufforderungen: told / asked / ordered … + Person + to + Infinitiv. Verneint: not to + Infinitiv (told him not to touch it).',
+  question: 'Indirekte Fragen: Wortstellung wie im Aussagesatz, kein do / did (where he was going). Ja/Nein-Fragen werden mit if oder whether eingeleitet.',
+  mixed: 'Achte auf drei Dinge gleichzeitig: Zeitenverschiebung, Pronomen und Zeit- / Ortsangaben.',
+};
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Lower-case, unify apostrophes, expand n't / 'll / 've / 're / 'm, drop punctuation.
+// ('d and 's stay as typed: they are ambiguous, so answer keys use full forms.)
+function exNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[’‘´`]/g, "'")
+    .replace(/\bwon't\b/g, 'will not')
+    .replace(/\bcan't\b/g, 'can not')
+    .replace(/\bcannot\b/g, 'can not')
+    .replace(/n't\b/g, ' not')
+    .replace(/'ll\b/g, ' will')
+    .replace(/'ve\b/g, ' have')
+    .replace(/'re\b/g, ' are')
+    .replace(/'m\b/g, ' am')
+    .replace(/[.,!?;:"“”„]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// "She said (that) she left" -> ["She said that she left", "She said she left"]
+function exExpand(str) {
+  const re = /\(([^)]*)\)/;
+  let out = [str];
+  while (out.some(s => re.test(s))) {
+    out = out.flatMap(s => {
+      const m = s.match(re);
+      return m ? [s.replace(re, m[1]), s.replace(re, '')] : [s];
+    });
+  }
+  return out.map(s => s.replace(/\s+/g, ' ').trim());
+}
+
+function exMatchesAny(typed, variants) {
+  const nt = exNorm(typed);
+  return !!nt && variants.flatMap(exExpand).map(exNorm).includes(nt);
+}
+
+// Typed gap: exact match after normalising; a one-letter typo is only tolerated in
+// long single words (in "had finished" vs "has finished" one letter IS the error).
+function exCheckGap(typed, accepted) {
+  const nt = exNorm(typed);
+  if (!nt) return { ok: false };
+  const norms = accepted.flatMap(exExpand).map(exNorm);
+  if (norms.includes(nt)) return { ok: true, type: 'exact' };
+  if (norms.some(n => !/\s/.test(n) && n.length >= 8 && levenshtein(nt, n) === 1)) return { ok: true, type: 'typo' };
+  return { ok: false };
+}
+
+function exFill(text, answers) {
+  let i = 0;
+  return text.replace(/___/g, () => answers[i++] ?? '___');
+}
+
+function recordExerciseResult(card, isCorrect, rating) {
+  applyWeakUpdate(card, isCorrect);
+  recordAnswer(card, isCorrect);
+  updateSRS(card.key, rating);
+  if (rating === 0 && !card.requeued && sessionType !== 'kurztest') {
+    const pos = Math.min(sessionIdx + 4, sessionCards.length);
+    sessionCards.splice(pos, 0, { ...card, requeued: true });
+    sessionTotal = sessionCards.length;
+  }
+  if (isCorrect) sessionCorrect++; else sessionWrong++;
+}
+
+function exHeaderHtml(e, defaultTask, extra) {
+  return `<div class="ex-card">
+    <div class="ex-task">${escHtml(e.task || defaultTask)}</div>
+    ${e.passage ? `<div class="ex-passage">${escHtml(e.passage)}</div>` : ''}
+    ${e.prompt ? `<div class="ex-prompt">${escHtml(e.prompt)}</div>` : ''}
+    ${extra || ''}
+  </div>`;
+}
+
+function exFeedbackHtml(ok, msg) {
+  return `<div class="feedback-box ${ok ? 'ok' : 'fail'}">${msg}</div>`;
+}
+
+function exHintHtml(e) {
+  const text = e.hint || RULE_HINTS[e.rule];
+  return text ? `<div class="notice">💡 ${escHtml(text)}</div>` : '';
+}
+
+function exContinueHtml() {
+  return `<button class="btn-continue" onclick="sessionIdx++;renderCurrentCard()">Weiter →</button>`;
+}
+
+function renderExercise(card) {
+  switch (card.entry.kind) {
+    case 'choice': renderExChoice(card); break;
+    case 'gap':    renderExGap(card);    break;
+    case 'order':  renderExOrder(card);  break;
+    case 'match':  renderExMatch(card);  break;
+    case 'mark':   renderExMark(card);   break;
+    default:       renderExRewrite(card);
+  }
+}
+
+// ----- choice: pick the right option for each gap -----
+
+function renderExChoice(card) {
+  cardState.exPicked = [];
+  cardState.exOpts = card.entry.gaps.map(g => shuffle(g.options));
+  drawExChoice(card);
+}
+
+function drawExChoice(card) {
+  const e = card.entry;
+  const picked = cardState.exPicked;
+  const idx  = picked.length;
+  const done = idx >= e.gaps.length;
+
+  let sentence = '';
+  e.text.split('___').forEach((part, i) => {
+    sentence += escHtml(part);
+    if (i >= e.gaps.length) return;
+    if (i < picked.length) {
+      const cls = done ? (picked[i] === e.gaps[i].answer ? ' ok' : ' wrong') : '';
+      sentence += `<span class="ex-gap filled${cls}">${escHtml(picked[i])}</span>`;
+    } else {
+      sentence += `<span class="ex-gap${i === idx ? ' current' : ''}">&nbsp;</span>`;
+    }
+  });
+
+  let below;
+  if (!done) {
+    below = `<div class="mc-options">${cardState.exOpts[idx].map((o, i) =>
+      `<button class="mc-option" onclick="pickExChoice(${i})">${escHtml(o)}</button>`).join('')}</div>`;
+  } else {
+    const ok = e.gaps.every((g, i) => picked[i] === g.answer);
+    below = exFeedbackHtml(ok, ok ? '✓ Richtig!' : `✗ Richtig: ${escHtml(exFill(e.text, e.gaps.map(g => g.answer)))}`)
+      + exHintHtml(e) + exContinueHtml();
+  }
+
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Wähle die richtige Form.', `<div class="ex-sentence">${sentence}</div>`) + below;
+}
+
+function pickExChoice(optIdx) {
+  const card = sessionCards[sessionIdx];
+  const gaps = card.entry.gaps;
+  cardState.exPicked.push(cardState.exOpts[cardState.exPicked.length][optIdx]);
+  if (cardState.exPicked.length === gaps.length) {
+    const ok = gaps.every((g, i) => cardState.exPicked[i] === g.answer);
+    recordExerciseResult(card, ok, ok ? 2 : 0);
+  }
+  drawExChoice(card);
+}
+
+// ----- gap: type the missing words -----
+
+function renderExGap(card) {
+  const e = card.entry;
+  let sentence = '';
+  e.text.split('___').forEach((part, i) => {
+    sentence += escHtml(part);
+    if (i >= e.answers.length) return;
+    const len = Math.min(28, Math.max(6, ...e.answers[i].map(a => a.replace(/[()]/g, '').length)) + 2);
+    sentence += `<input type="text" class="ex-gap-input" id="ex-gap-${i}" style="width:${len}ch"
+      autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+      onkeydown="exGapKey(event, ${i})">`;
+  });
+  const bank = e.bank
+    ? `<div class="ex-pool">${e.bank.map(b => `<span class="ex-chip static">${escHtml(b)}</span>`).join('')}</div>` : '';
+
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Ergänze die Lücken.', `<div class="ex-sentence">${sentence}</div>${bank}`)
+    + `<button class="btn-continue" id="ex-check" onclick="checkExGap()">Prüfen</button>
+       <div id="ex-after"></div>`;
+  document.getElementById('ex-gap-0').focus();
+}
+
+function exGapKey(ev, i) {
+  if (ev.key !== 'Enter') return;
+  const next = document.getElementById(`ex-gap-${i + 1}`);
+  if (next) next.focus(); else checkExGap();
+}
+
+function checkExGap() {
+  if (cardState.exChecked) return;
+  cardState.exChecked = true;
+  const card = sessionCards[sessionIdx];
+  const e = card.entry;
+
+  let allOk = true, anyTypo = false;
+  e.answers.forEach((accepted, i) => {
+    const input = document.getElementById(`ex-gap-${i}`);
+    const r = exCheckGap(input.value, accepted);
+    input.disabled = true;
+    input.classList.add(r.ok ? 'correct' : 'wrong');
+    if (!r.ok) allOk = false;
+    else if (r.type === 'typo') anyTypo = true;
+  });
+  recordExerciseResult(card, allOk, allOk ? (anyTypo ? 2 : 3) : 0);
+
+  const solution = escHtml(exFill(e.text, e.answers.map(a => a[0].replace(/[()]/g, ''))));
+  const msg = !allOk ? `✗ Richtig: ${solution}` : anyTypo ? `✓ Fast perfekt! Richtig: ${solution}` : '✓ Richtig!';
+  document.getElementById('ex-check').classList.add('hidden');
+  document.getElementById('ex-after').innerHTML = exFeedbackHtml(allOk, msg) + exHintHtml(e) + exContinueHtml();
+}
+
+// ----- order: tap the words into the right order -----
+
+function renderExOrder(card) {
+  const tokens = card.entry.answer.replace(/[.!?]+$/, '').split(/\s+/);
+  let order = tokens.map((_, i) => i);
+  for (let tries = 0; tokens.length > 2 && tries < 10; tries++) {
+    order = shuffle(order);
+    if (!order.every((v, i) => v === i)) break;
+  }
+  cardState.exTokens = tokens;
+  cardState.exPool   = order;
+  cardState.exPlaced = [];
+  drawExOrder(card);
+}
+
+function drawExOrder(card) {
+  const e = card.entry;
+  const toks = cardState.exTokens;
+  const checked = !!cardState.exChecked;
+  const lineCls = checked ? (cardState.exOk ? ' ok' : ' wrong') : '';
+
+  const placed = cardState.exPlaced.map(ti =>
+    `<button class="ex-chip placed" ${checked ? 'disabled' : ''} onclick="unplaceExToken(${ti})">${escHtml(toks[ti])}</button>`).join('')
+    || '<span class="ex-placeholder">Tippe die Wörter in der richtigen Reihenfolge an …</span>';
+  const pool = cardState.exPool.map(ti =>
+    `<button class="ex-chip" onclick="placeExToken(${ti})">${escHtml(toks[ti])}</button>`).join('');
+
+  let below = '';
+  if (checked) {
+    below = exFeedbackHtml(cardState.exOk, cardState.exOk ? '✓ Richtig!' : `✗ Richtig: ${escHtml(e.answer)}`)
+      + exHintHtml(e) + exContinueHtml();
+  } else if (cardState.exPool.length === 0) {
+    below = `<button class="btn-continue" onclick="checkExOrder()">Prüfen</button>`;
+  }
+
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Bringe die Wörter in die richtige Reihenfolge.',
+      `<div class="ex-answer-line${lineCls}">${placed}</div>`)
+    + (checked ? '' : `<div class="ex-pool">${pool}</div>`) + below;
+}
+
+function placeExToken(ti) {
+  cardState.exPool = cardState.exPool.filter(t => t !== ti);
+  cardState.exPlaced.push(ti);
+  drawExOrder(sessionCards[sessionIdx]);
+}
+
+function unplaceExToken(ti) {
+  if (cardState.exChecked) return;
+  cardState.exPlaced = cardState.exPlaced.filter(t => t !== ti);
+  cardState.exPool.push(ti);
+  drawExOrder(sessionCards[sessionIdx]);
+}
+
+function checkExOrder() {
+  const card = sessionCards[sessionIdx];
+  const e = card.entry;
+  const typed = cardState.exPlaced.map(ti => cardState.exTokens[ti]).join(' ');
+  cardState.exOk = exMatchesAny(typed, [e.answer, ...(e.alt || [])]);
+  cardState.exChecked = true;
+  recordExerciseResult(card, cardState.exOk, cardState.exOk ? 2 : 0);
+  drawExOrder(card);
+}
+
+// ----- match: pair the items of two columns -----
+
+function renderExMatch(card) {
+  const e = card.entry;
+  cardState.exRight    = shuffle(e.right.map((_, i) => i));
+  cardState.exSel      = null;
+  cardState.exDone     = [];
+  cardState.exMistakes = 0;
+  drawExMatch(card);
+}
+
+function drawExMatch(card) {
+  const e = card.entry;
+  const n = e.left.length;
+  const finished = cardState.exDone.length === n;
+
+  const left = e.left.map((t, i) => {
+    const cls = cardState.exDone.includes(i) ? ' done' : cardState.exSel === i ? ' selected' : '';
+    return `<button class="ex-match-btn${cls}" id="ex-l-${i}" ${cls === ' done' ? 'disabled' : ''} onclick="tapExLeft(${i})">${escHtml(t)}</button>`;
+  }).join('');
+  const right = cardState.exRight.map(j => {
+    const done = cardState.exDone.includes(j);
+    return `<button class="ex-match-btn${done ? ' done' : ''}" id="ex-r-${j}" ${done ? 'disabled' : ''} onclick="tapExRight(${j})">${escHtml(e.right[j])}</button>`;
+  }).join('');
+
+  let below = '';
+  if (finished) {
+    const m = cardState.exMistakes;
+    const tol = Math.max(1, Math.floor(n / 3));
+    below = exFeedbackHtml(m <= tol, m === 0 ? '✓ Alles richtig zugeordnet!'
+        : `${m <= tol ? '✓' : '✗'} Fertig – ${m} ${m === 1 ? 'Fehlversuch' : 'Fehlversuche'}`)
+      + exHintHtml(e) + exContinueHtml();
+  } else {
+    below = `<div class="rating-label">Erst links, dann rechts antippen · ${cardState.exDone.length}/${n} zugeordnet</div>`;
+  }
+
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Ordne zu.', `<div class="ex-match"><div class="ex-match-col">${left}</div><div class="ex-match-col">${right}</div></div>`)
+    + below;
+}
+
+function tapExLeft(i) {
+  cardState.exSel = cardState.exSel === i ? null : i;
+  drawExMatch(sessionCards[sessionIdx]);
+}
+
+function tapExRight(j) {
+  if (cardState.exSel === null) return;
+  const card = sessionCards[sessionIdx];
+  if (j === cardState.exSel) {
+    cardState.exDone.push(j);
+    cardState.exSel = null;
+    if (cardState.exDone.length === card.entry.left.length) {
+      const m = cardState.exMistakes;
+      const ok = m <= Math.max(1, Math.floor(card.entry.left.length / 3));
+      recordExerciseResult(card, ok, m === 0 ? 3 : ok ? 2 : 0);
+    }
+    drawExMatch(card);
+  } else {
+    cardState.exMistakes++;
+    drawExMatch(card);
+    const btn = document.getElementById(`ex-r-${j}`);
+    if (btn) {
+      btn.classList.add('wrong');
+      setTimeout(() => { const b = document.getElementById(`ex-r-${j}`); if (b) b.classList.remove('wrong'); }, 600);
+    }
+  }
+}
+
+// ----- rewrite: type a whole sentence; auto-checked against the accepted variants -----
+// A match is scored automatically. Otherwise the differences are shown and the learner
+// decides whether a different wording was still right (valid paraphrases exist).
+
+function renderExRewrite(card) {
+  const e = card.entry;
+  const starter = e.starter ? `<div class="ex-starter">${escHtml(e.starter)} …</div>` : '';
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Forme in Reported Speech um.')
+    + `<div>${starter}<textarea id="ex-text" class="ex-textarea" rows="${e.starter ? 2 : 3}"
+         autocomplete="off" autocorrect="off" spellcheck="false" onkeydown="exRewriteKey(event)"></textarea></div>
+       <button class="btn-continue" id="ex-check" onclick="checkExRewrite()">Prüfen</button>
+       <div id="ex-after"></div>`;
+  document.getElementById('ex-text').focus();
+}
+
+function exRewriteKey(ev) {
+  if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); checkExRewrite(); }
+}
+
+function checkExRewrite() {
+  if (cardState.exChecked) return;
+  cardState.exChecked = true;
+  const card = sessionCards[sessionIdx];
+  const e = card.entry;
+  const area = document.getElementById('ex-text');
+  area.disabled = true;
+
+  const typed = ((e.starter ? e.starter + ' ' : '') + area.value.trim()).trim();
+  document.getElementById('ex-check').classList.add('hidden');
+  const after = document.getElementById('ex-after');
+
+  if (exMatchesAny(typed, e.answers)) {
+    recordExerciseResult(card, true, 3);
+    after.innerHTML = exFeedbackHtml(true, '✓ Richtig!') + exHintHtml(e) + exContinueHtml();
+    return;
+  }
+
+  const diff = exDiff(typed, e.answers);
+  const others = e.answers.filter((_, i) => i !== diff.answerIdx);
+  after.innerHTML = `
+    <div class="ex-card">
+      <div class="ex-task">Deine Lösung</div>
+      <div class="ex-compare-text">${diff.userHtml}</div>
+      <div class="ex-task">Musterlösung</div>
+      <div class="ex-compare-text model">${diff.modelHtml}</div>
+      ${others.length ? `<div class="ex-task">Weitere Lösungen</div>${others.map(a => `<div class="ex-compare-text model">${escHtml(a)}</div>`).join('')}` : ''}
+      ${e.answers.some(a => a.includes('(')) ? '<div class="rating-label">Wörter in Klammern sind optional.</div>' : ''}
+    </div>
+    ${exHintHtml(e)}
+    <div class="rating-section visible">
+      <div class="rating-label">Anders formuliert, aber trotzdem richtig? Dann bewerte selbst:</div>
+      <div class="rating-buttons" style="grid-template-columns:repeat(3,1fr)">
+        <button class="btn-rate btn-rate-0" onclick="doRateAndAdvance(0)"><span class="btn-rate-emoji">😣</span>Falsch</button>
+        <button class="btn-rate btn-rate-1" onclick="doRateAndAdvance(1)"><span class="btn-rate-emoji">😐</span>Fast</button>
+        <button class="btn-rate btn-rate-2" onclick="doRateAndAdvance(2)"><span class="btn-rate-emoji">😊</span>War auch richtig</button>
+      </div>
+    </div>`;
+}
+
+// Word-level diff (longest common subsequence) between the learner's sentence and the
+// closest accepted variant. Contractions are compared in expanded form, so
+// "wasn't" vs "was not" is no difference; the learner's own wording is shown.
+function exTokenize(str) {
+  const tokens = str.trim().split(/\s+/).filter(Boolean)
+    .map(raw => ({ raw, norms: exNorm(raw).split(' ').filter(Boolean) }));
+  const flat = [], owner = [];
+  tokens.forEach((t, ti) => t.norms.forEach(w => { flat.push(w); owner.push(ti); }));
+  return { tokens, flat, owner };
+}
+
+function exLcs(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const inA = new Array(a.length).fill(false), inB = new Array(b.length).fill(false);
+  for (let i = a.length, j = b.length; i > 0 && j > 0;) {
+    if (a[i - 1] === b[j - 1]) { inA[i - 1] = inB[j - 1] = true; i--; j--; }
+    else if (dp[i - 1][j] >= dp[i][j - 1]) i--;
+    else j--;
+  }
+  return { inA, inB, len: dp[a.length][b.length] };
+}
+
+function exDiff(typed, answers) {
+  const user = exTokenize(typed);
+  let best = null;
+  answers.forEach((answer, answerIdx) => exExpand(answer).forEach(variant => {
+    const model = exTokenize(variant);
+    const lcs = exLcs(user.flat, model.flat);
+    const cost = user.flat.length + model.flat.length - 2 * lcs.len;
+    if (!best || cost < best.cost) best = { cost, answerIdx, model, lcs };
+  }));
+
+  const badUser = new Set(), badModel = new Set();
+  user.flat.forEach((_, k) => { if (!best.lcs.inA[k]) badUser.add(user.owner[k]); });
+  best.model.flat.forEach((_, k) => { if (!best.lcs.inB[k]) badModel.add(best.model.owner[k]); });
+
+  return {
+    answerIdx: best.answerIdx,
+    userHtml: user.tokens.map((t, i) => badUser.has(i) ? `<span class="ex-diff-bad">${escHtml(t.raw)}</span>` : escHtml(t.raw)).join(' ') || '–',
+    modelHtml: best.model.tokens.map((t, i) => badModel.has(i) ? `<span class="ex-diff-miss">${escHtml(t.raw)}</span>` : escHtml(t.raw)).join(' '),
+  };
+}
+
+// ----- mark: pick a pen, tap the words that change in reported speech -----
+// Only words inside the quotation marks can change; the same word in the narration
+// (e.g. "told me") must stay unmarked.
+
+const MARK_CATS = { v: 'Verb', p: 'Pronomen', t: 'Zeit & Ort' };
+
+function exParseMark(text) {
+  const words = [];
+  let inQuote = false;
+  const layout = text.split('\n').map(line => {
+    const chunks = line.split(/\s+/).filter(Boolean);
+    return chunks.map((chunk, ci) => {
+      if (ci === 0 && chunks.length > 1 && chunk.endsWith(':')) return { speaker: chunk };
+      const [, pre, core, post] = chunk.match(/^([“"‘(]*)(.*?)([.,!?;:”"’)…]*)$/);
+      if (/[“"]/.test(pre)) inQuote = true;
+      const word = { text: chunk, core: core.toLowerCase().replace(/’/g, "'"), inQuote, idx: words.length };
+      words.push(word);
+      if (/[”"]/.test(post)) inQuote = false;
+      return { word: word.idx };
+    });
+  });
+  return { words, layout };
+}
+
+function exMarkSolution(e, parsed) {
+  const byWord = {};
+  Object.keys(MARK_CATS).forEach(c => (e.marks[c] || []).forEach(w => { byWord[w.toLowerCase()] = c; }));
+  return parsed.words.map(w => (w.inQuote ? byWord[w.core] || null : null));
+}
+
+function renderExMark(card) {
+  const e = card.entry;
+  cardState.exParsed = exParseMark(e.text);
+  cardState.exSolution = exMarkSolution(e, cardState.exParsed);
+  cardState.exMarks = {};
+  cardState.exCats = e.cats || ['v', 'p', 't'];
+  cardState.exPen = cardState.exCats.length === 1 ? cardState.exCats[0] : null;
+  drawExMark(card);
+}
+
+function drawExMark(card) {
+  const e = card.entry;
+  const { words, layout } = cardState.exParsed;
+  const checked = !!cardState.exChecked;
+
+  const body = layout.map(line => line.map(item => {
+    if (item.speaker) return `<span class="ex-speaker">${escHtml(item.speaker)}</span>`;
+    const w = words[item.word];
+    const given = cardState.exMarks[w.idx] || null;
+    const want = cardState.exSolution[w.idx];
+    let cls = given ? ` cat-${given}` : '';
+    if (checked) {
+      if (want && given === want) cls = ` cat-${want} ok`;
+      else if (want) cls = ` cat-${want} miss`;
+      else if (given) cls = ' extra';
+      else cls = '';
+    }
+    return `<span class="ex-word${cls}" onclick="tapExWord(${w.idx})">${escHtml(w.text)}</span>`;
+  }).join(' ')).join('<br>');
+
+  const pens = cardState.exCats.map(c =>
+    `<button class="ex-pen cat-${c}${cardState.exPen === c ? ' active' : ''}" ${checked ? 'disabled' : ''} onclick="tapExPen('${c}')">${MARK_CATS[c]}</button>`).join('');
+
+  let below;
+  if (checked) {
+    const errors = cardState.exErrors;
+    below = exFeedbackHtml(errors === 0, errors === 0 ? '✓ Alles richtig markiert!'
+        : `✗ ${errors} ${errors === 1 ? 'Wort' : 'Wörter'} falsch oder vergessen (gestrichelt umrandet bzw. durchgestrichen)`)
+      + exHintHtml(e) + exContinueHtml();
+  } else {
+    below = (cardState.exPen ? '' : '<div class="rating-label">Wähle einen Stift und tippe dann die Wörter an.</div>')
+      + `<button class="btn-continue" onclick="checkExMark()">Prüfen</button>`;
+  }
+
+  document.getElementById('session-content').innerHTML =
+    exHeaderHtml(e, 'Markiere, was sich in der indirekten Rede ändert. Verbgruppen markierst du komplett (z. B. have been waiting).',
+      `${checked ? '' : `<div class="ex-pens">${pens}</div>`}<div class="ex-text-block">${body}</div>`)
+    + below;
+}
+
+function tapExPen(c) {
+  cardState.exPen = cardState.exPen === c ? null : c;
+  drawExMark(sessionCards[sessionIdx]);
+}
+
+function tapExWord(idx) {
+  if (cardState.exChecked || !cardState.exPen) return;
+  if (cardState.exMarks[idx] === cardState.exPen) delete cardState.exMarks[idx];
+  else cardState.exMarks[idx] = cardState.exPen;
+  drawExMark(sessionCards[sessionIdx]);
+}
+
+function checkExMark() {
+  const card = sessionCards[sessionIdx];
+  cardState.exErrors = cardState.exSolution.filter((want, i) => want !== (cardState.exMarks[i] || null)).length;
+  cardState.exChecked = true;
+  const errors = cardState.exErrors;
+  recordExerciseResult(card, errors === 0, errors === 0 ? 2 : errors === 1 ? 1 : 0);
+  drawExMark(card);
+}
+
 // ===== RESULTS SCREEN =====
 
 function renderResults() {
@@ -1790,8 +2401,13 @@ function renderStatsScreen() {
   const chaptersAvailable = getAllChapterInfos().length;
 
   const renderWordLine = (w, icon) => {
-    const wordId = w.type === 'conjugation' ? `${w.entry.form} (${w.entry.pronoun})` : getEntryId(w.entry, w.type);
-    const de  = w.entry.de;
+    let wordId = getEntryId(w.entry, w.type);
+    let de     = w.entry.de;
+    if (w.type === 'conjugation') wordId = `${w.entry.form} (${w.entry.pronoun})`;
+    if (w.type === 'exercise') {
+      wordId = escHtml(w.entry.prompt || w.entry.text || w.entry.answer || w.entry.id);
+      de     = RULE_LABELS[w.entry.rule] || 'Grammatik';
+    }
     const tot = w.correct + w.wrong;
     return `<div class="stats-word-row">${icon} <span class="stats-word-en">${wordId}</span><span class="stats-word-arrow"> → </span><span class="stats-word-de">${de}</span><span class="stats-word-score">(${w.correct}/${tot} richtig)</span></div>`;
   };
@@ -1894,7 +2510,8 @@ async function init() {
 
   selectedLanguage = localStorage.getItem('selected_language') || 'en';
   direction = `${getLangCode()}-DE`;
-  archivOpen = localStorage.getItem('archiv_open') === 'true';
+  sectionOpen.archiv    = localStorage.getItem('archiv_open') === 'true';
+  sectionOpen.grammatik = localStorage.getItem('grammatik_open') !== 'false'; // standardmäßig offen
 
   await loadIndexForLanguage(selectedLanguage);
   await renderChapterScreen();

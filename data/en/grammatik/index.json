@@ -1,0 +1,50 @@
+[
+  {
+    "id": "rs-0-ueberblick",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 0 – Überblick: Was ändert sich?",
+    "description": "Verben, Pronomen sowie Zeit & Ort in der direkten Rede markieren",
+    "file": "data/en/grammatik/rs-0-ueberblick.json"
+  },
+  {
+    "id": "rs-1-zeit-ort",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 1 – Zeit- & Ortsangaben",
+    "description": "today → that day, here → there, ago → before",
+    "file": "data/en/grammatik/rs-1-zeit-ort.json"
+  },
+  {
+    "id": "rs-2-pronomen",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 2 – Pronomen",
+    "description": "I → he / she, my → his / her, you → I / him …",
+    "file": "data/en/grammatik/rs-2-pronomen.json"
+  },
+  {
+    "id": "rs-3-zeiten",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 3 – Zeitenverschiebung",
+    "description": "present → past, will → would, present perfect → past perfect",
+    "file": "data/en/grammatik/rs-3-zeiten.json"
+  },
+  {
+    "id": "rs-4-verben-befehle-fragen",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 4 – Reporting verbs, Befehle & Fragen",
+    "description": "say / tell, promise, admit, deny … · told him to … · asked if …",
+    "file": "data/en/grammatik/rs-4-verben-befehle-fragen.json"
+  },
+  {
+    "id": "rs-5-alles-zusammen",
+    "type": "exercise",
+    "language": "en",
+    "title": "Reported Speech 5 – Alles zusammen",
+    "description": "Wiederholung: Zeiten, Pronomen, Zeitangaben, Fragen, Befehle, Fehler finden",
+    "file": "data/en/grammatik/rs-5-alles-zusammen.json"
+  }
+]
